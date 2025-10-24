@@ -2,10 +2,12 @@ import os
 import re
 import streamlit as st
 from dotenv import load_dotenv
+from openai import OpenAI
 from app.parsers.pdf import extract_text
 from app.qa.chunking import clean_text, split_into_chunks
+from app.qa.retrieval import embed_texts, answer_with_context
 import inspect
-print("extract_text() pochodzi z pliku:", inspect.getfile(extract_text))
+print("extract_text() kommer fra fil:", inspect.getfile(extract_text))
 
 load_dotenv()
 st.set_page_config(page_title="PDF-spørsmål (MVP)", page_icon="📄")
@@ -13,6 +15,7 @@ st.title("📄 PDF-agent (MVP) - tekstuttrekk og chunking")
 
 # Filopplasting
 uploaded = st.file_uploader("Last opp en PDF-fil", type=["pdf"])
+spm = st.text_input("Skriv inn spørsmålet ditt til dokumentet")
 
 if uploaded:
     # Lager folder hvis den ikke finnes
@@ -26,7 +29,7 @@ if uploaded:
     st.success(f"Lagret: {uploaded.name}")
 
     # Tekstuttrekk og chunking
-    with st.spinner("Leser og deler opp dokumentet..."):
+    with st.spinner("Leser tenser og deler opp dokumentet..."):
         raw = extract_text(pdf_path)
         text = clean_text(raw)
         chunks = split_into_chunks(text, size=1200, overlap=180)
@@ -43,11 +46,43 @@ if uploaded:
 
     st.write(f"**Lengde (tegn):** {len(text)}")
     st.write(f"**Antall chunks:** {len(chunks)}")
+    
+    # --- Indeksering (embeddings) én gang per opplastet PDF ---
+    if "chunk_vecs" not in st.session_state or st.session_state.get("pdf_path") != pdf_path:
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        with st.spinner("Lager embeddings for alle tekstbiter..."):
+            chunk_vecs = embed_texts(client, chunks)
+        st.session_state["pdf_path"] = pdf_path
+        st.session_state["chunks"] = chunks
+        st.session_state["chunk_vecs"] = chunk_vecs
+        st.success("Indeksering fullført.")
+    
+    
 
-    # Viser noen chunker
+    # Viser noen chunker - kommenter senere- bare for test skyld
     with st.expander("Vis de 3 første chunkene"):
         for i, ch in enumerate(chunks[:3], start=1):
             snippet = re.sub(r"\s+", " ", ch[:800]).strip()
             st.markdown(f"**Chunk {i}**  \n{snippet}…")
 else:
     st.info("Last opp en PDF for å se tekstuttrekk og hvordan den deles i biter.")
+    
+    
+if spm and "chunk_vecs" in st.session_state:
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    chunks = st.session_state["chunks"]
+    chunk_vecs = st.session_state["chunk_vecs"]
+
+    with st.spinner("Søker i dokumentet og genererer svar..."):
+        answer, cites = answer_with_context(client, spm, chunks, chunk_vecs, k=3)
+
+    st.markdown("### ✅ Svar")
+    st.write(answer)
+
+    with st.expander("Vis korte sitater (kildeutdrag)"):
+        for i, snip in cites:
+            st.markdown(f"**Chunk {i}:**\n\n> {snip} …")
+elif spm:
+    st.info("Last opp et dokument først, så kan du stille spørsmål.")
+else:
+    st.caption("Tips: Last opp dokumentet, se at det deles i biter, og prøv et presist spørsmål.")
