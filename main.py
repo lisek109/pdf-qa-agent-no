@@ -6,12 +6,11 @@ from openai import OpenAI
 from app.parsers.pdf import extract_text
 from app.qa.chunking import clean_text, split_into_chunks
 from app.qa.retrieval import embed_texts, answer_with_context
-import inspect
-print("extract_text() kommer fra fil:", inspect.getfile(extract_text))
+
 
 load_dotenv()
-st.set_page_config(page_title="PDF-spørsmål (MVP)", page_icon="📄")
-st.title("📄 PDF-agent (MVP) - tekstuttrekk og chunking")
+st.set_page_config(page_title="PDF-spørsmål (NO)", page_icon="📄")
+st.title("📄 PDF-agent - flere dokumenter, norsk Q&A")
 
 # Filopplasting
 uploaded = st.file_uploader("Last opp en PDF-fil", type=["pdf"])
