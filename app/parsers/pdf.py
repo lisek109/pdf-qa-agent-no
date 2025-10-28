@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List, Tuple
 import fitz  # PyMuPDF
 
 def extract_text(path: str, max_pages: Optional[int] = None) -> str:
@@ -15,6 +15,20 @@ def extract_text(path: str, max_pages: Optional[int] = None) -> str:
                 break
             texts.append(page.get_text("text"))  # "layout-aware" tekst
     return "\n".join(texts)
+
+
+def extract_pages(path: str, max_pages: Optional[int] = None) -> List[Tuple[int, str]]:
+    """
+    Leser PDF og returnerer liste av (side_nr, tekst).
+    side_nr starter på 1 (slik folk forventer).
+    """
+    doc = fitz.open(path)
+    out: List[Tuple[int, str]] = []
+    for i, page in enumerate(doc, start=1):
+        if max_pages is not None and i > max_pages:
+            break
+        out.append((i, page.get_text("text")))
+    return out
 
 
 # def extract_text(path: str, max_pages: Optional[int] = None) -> str:
