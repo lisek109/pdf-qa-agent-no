@@ -61,8 +61,10 @@ if uploaded:
     # Viser noen chunker - kommenter senere- bare for test skyld
     with st.expander("Vis de 3 første chunkene"):
         for i, ch in enumerate(chunks[:3], start=1):
-            snippet = re.sub(r"\s+", " ", ch[:800]).strip()
-            st.markdown(f"**Chunk {i}**  \n{snippet}…")
+            st.markdown(f"**Chunk {i}**")
+            st.text_area(f"chunk_{i}", value=ch, height=200)
+            #snippet = re.sub(r"\s+", " ", ch[:800]).strip()
+            #st.markdown(f"**Chunk {i}**  \n{snippet}…")
 else:
     st.info("Last opp en PDF for å se tekstuttrekk og hvordan den deles i biter.")
     
