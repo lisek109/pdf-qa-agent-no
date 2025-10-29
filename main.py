@@ -6,11 +6,28 @@ from openai import OpenAI
 from app.parsers.pdf import extract_text
 from app.qa.chunking import clean_text, split_into_chunks
 from app.qa.retrieval import embed_texts, answer_with_context
+from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
 
 
 load_dotenv()
 st.set_page_config(page_title="PDF-spørsmål (NO)", page_icon="📄")
 st.title("📄 PDF-agent - flere dokumenter, norsk Q&A")
+
+
+# --- Konfigurasjon (sidefelt) ---  # 
+with st.sidebar:
+    # Seksjonstittel i sidepanelet
+    st.subheader("⚙️ Konfigurasjon")
+
+    # Tekstområde for systemprompt – kan overstyre standarden z prompts.py
+    # Bruker kan styre stil/språk/format svarene
+    sys_prompt = st.text_area(
+        "Systemprompt (norsk)",
+        value=DEFAULT_SYSTEM_PROMPT,  # fallback-tekst (definér uansett i koden)
+        height=180
+    )
+
+
 
 # Filopplasting
 uploaded = st.file_uploader("Last opp en PDF-fil", type=["pdf"])
@@ -47,14 +64,39 @@ if uploaded:
     st.write(f"**Antall chunks:** {len(chunks)}")
     
     # --- Indeksering (embeddings) én gang per opplastet PDF ---
+    # Ide: Beregn embeddings bare når vi MÅ (første gang i sesjonen eller når filen endres),
+    # og legg dem i Streamlits sesjonsminne (st.session_state) for å unngå unødvendige API-kall/kostnader.
     if "chunk_vecs" not in st.session_state or st.session_state.get("pdf_path") != pdf_path:
+        # Oppretter OpenAI-klient. Nøkkelen hentes fra miljøvariabel (satt via .env).
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        # Viser spinner i UI mens vi lager embeddings (kan ta noen sekunder for store PDF-er).
         with st.spinner("Lager embeddings for alle tekstbiter..."):
+            # Kaller embed_texts(...) som:
+            #  - sender alle chunks til embedding-modellen,
+            #  - mottar vektorrepresentasjoner (np.ndarray, form ~ [n_chunks, dim]),
+            #  - L2-normaliserer for å kunne bruke skalarprodukt som kosinuslikhet.
             chunk_vecs = embed_texts(client, chunks)
+
+        # Husk hvilken fil som ble indeksert i denne sesjonen,
+        # og legg både tekstbitene og vektorene i sesjonsminnet.
+        # Dette gjør at vi kan svare på mange spørsmål uten å recompute embeddings.
         st.session_state["pdf_path"] = pdf_path
         st.session_state["chunks"] = chunks
         st.session_state["chunk_vecs"] = chunk_vecs
+
+        # Kort bekreftelse i UI
         st.success("Indeksering fullført.")
+    
+    # # --- Indeksering (embeddings) én gang per opplastet PDF ---
+    # if "chunk_vecs" not in st.session_state or st.session_state.get("pdf_path") != pdf_path:
+    #     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    #     with st.spinner("Lager embeddings for alle tekstbiter..."):
+    #         chunk_vecs = embed_texts(client, chunks)
+    #     st.session_state["pdf_path"] = pdf_path
+    #     st.session_state["chunks"] = chunks
+    #     st.session_state["chunk_vecs"] = chunk_vecs
+    #     st.success("Indeksering fullført.")
     
     
 
@@ -69,13 +111,18 @@ else:
     st.info("Last opp en PDF for å se tekstuttrekk og hvordan den deles i biter.")
     
     
+# --- Spørsmål → Svar ---  # 
 if spm and "chunk_vecs" in st.session_state:
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY")) 
     chunks = st.session_state["chunks"]
     chunk_vecs = st.session_state["chunk_vecs"]
 
     with st.spinner("Søker i dokumentet og genererer svar..."):
-        answer, cites = answer_with_context(client, spm, chunks, chunk_vecs, k=3)
+        # Vi sender med systemprompt fra sidepanelet (eller default hvis ikke endret)
+        answer, cites = answer_with_context(
+            client, spm, chunks, chunk_vecs, k=3,
+            system_prompt=sys_prompt  # NEW: brukerens/standard prompt
+        )
 
     st.markdown("### ✅ Svar")
     st.write(answer)
@@ -87,3 +134,23 @@ elif spm:
     st.info("Last opp et dokument først, så kan du stille spørsmål.")
 else:
     st.caption("Tips: Last opp dokumentet, se at det deles i biter, og prøv et presist spørsmål.")
+    
+    
+# if spm and "chunk_vecs" in st.session_state:
+#     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+#     chunks = st.session_state["chunks"]
+#     chunk_vecs = st.session_state["chunk_vecs"]
+
+#     with st.spinner("Søker i dokumentet og genererer svar..."):
+#         answer, cites = answer_with_context(client, spm, chunks, chunk_vecs, k=3)
+
+#     st.markdown("### ✅ Svar")
+#     st.write(answer)
+
+#     with st.expander("Vis korte sitater (kildeutdrag)"):
+#         for i, snip in cites:
+#             st.markdown(f"**Chunk {i}:**\n\n> {snip} …")
+# elif spm:
+#     st.info("Last opp et dokument først, så kan du stille spørsmål.")
+# else:
+#     st.caption("Tips: Last opp dokumentet, se at det deles i biter, og prøv et presist spørsmål.")

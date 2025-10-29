@@ -1,12 +1,14 @@
 # app/qa/retrieval.py
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import hashlib, os
 import re
 import numpy as np
 from numpy.linalg import norm
 from openai import OpenAI
-from app.qa.prompts import SYSTEM_PROMPT
+from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
 
+
+# Konfig for modeller og Hvor mye kontekst vi maks pakker inn i promptet
 EMBED_MODEL = "text-embedding-3-small"
 CHAT_MODEL = "gpt-4o-mini"
 MAX_CONTEXT_CHARS = 2200  # begrens prompt-lengde, kost og latens
@@ -21,6 +23,7 @@ def l2_normalize(mat: np.ndarray) -> np.ndarray:
 def embed_texts(client: OpenAI, texts: List[str]) -> np.ndarray:
     """
     Lager embeddings for en liste tekster og returnerer som np.array[ n x d ].
+    L2-normalisert (klar for kosinuslikhet).
     """
     resp = client.embeddings.create(model=EMBED_MODEL, input=texts)
     vecs = np.array([d.embedding for d in resp.data], dtype=np.float32)
@@ -60,35 +63,53 @@ def build_context(chunks: List[str], idxs: np.ndarray, limit: int = MAX_CONTEXT_
             break
     return "\n\n---\n\n".join(parts)
 
-def answer_with_context(client: OpenAI, question: str, chunks: List[str], chunk_vecs: np.ndarray, k: int = 3):
+# ---------- Hovedfunksjon for Q&A ----------
+
+def answer_with_context(client: OpenAI, question: str, chunks: List[str], chunk_vecs: np.ndarray, k: int = 3,
+    system_prompt: Optional[str] = None,  # <- kommer fra UI; faller tilbake på DEFAULT_SYSTEM_PROMPT
+):
     """
-    Dettte går i stegene:
-    1) embedder spørsmål
-    2) finner top-k chunks
-    3) bygger kontekst
-    4) kaller chat-modellen med norsk systemprompt
-    Returnerer (svar, [(idx, kort_sitat), ...])
+    Steg for steg:
+      1) embedder spørsmålet
+      2) finner top-k relevante chunks
+      3) bygger KONTEKST
+      4) kaller chat-modellen med valgt systemprompt
+
+    Returnerer:
+      - answer: modellens svar (str)
+      - citations: liste med (chunk_index, kort_sitat) for UI
     """
+    # 1) Spørsmålets embedding
     q_vec = embed_query(client, question)
-    idxs, scores = top_k_indices(q_vec, chunk_vecs, k=k)
+
+    # 2) Hent top-k
+    idxs, _ = top_k_indices(q_vec, chunk_vecs, k=k)
+
+    # 3) Bygg kontekst-streng
     context = build_context(chunks, idxs, MAX_CONTEXT_CHARS)
 
+    # 4) Kall chat-modellen
+    msgs = [
+        {"role": "system", "content": system_prompt or DEFAULT_SYSTEM_PROMPT},
+        {"role": "user", "content": f"KONTEKST:\n{context}\n\nSPØRSMÅL: {question}"},
+    ]
     resp = client.chat.completions.create(
         model=CHAT_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"KONTEKST:\n{context}\n\nSPØRSMÅL: {question}"}
-        ],
+        messages=msgs,
         temperature=0
     )
     answer = resp.choices[0].message.content
 
-    # små sitater fra hver topp-bit, greit for åha i UI
+    # Små sitater fra hver topp-bit – nyttig for transparens
     citations = []
     for i in idxs:
         snip = re.sub(r"\s+", " ", chunks[int(i)][:200]).strip()
         citations.append((int(i), snip))
+
     return answer, citations
+
+
+##################   Cache embeddings   ##################
 
 def file_sha1(path: str) -> str:
     """
