@@ -1,0 +1,18 @@
+textarea {
+    border: 2px solid #6c6cff !important;
+    border-radius: 10px !important;
+    box-shadow: none !important;
+    padding: 10px !important;
+    font-size: 1.05rem !important;
+}
+
+div[data-testid="stTextarea"] label {
+    font-weight: 600 !important;
+    font-size: 1.05rem !important;
+}
+
+textarea:focus {
+    outline: none !important;
+    border: 2px solid #3333ff !important;
+    box-shadow: 0 0 0 3px rgba(51, 51, 255, 0.15) !important;
+}
