@@ -21,12 +21,12 @@ st.set_page_config(page_title="PDF-spørsmål (NO)", page_icon="📄")
 # Laster CSS for tilpasset styling
 load_css("assets/styles.css")
 # Tittel
-st.title("📄 PDF-agent - flere dokumenter, norsk Q&A")
+st.title("📄 PDF Assistent ")
 
 
 
 # --- Konfigurasjon (hovedkolonne) ---
-with st.expander("⚙️ Konfigurasjon av systemprompt", expanded=True):
+with st.expander("⚙️ Konfigurasjon av systemprompt", expanded=False):
     with st.form(key="sys_prompt_form_main", border=True):
         sys_prompt_input = st.text_area(
             "Systemprompt (norsk)",
