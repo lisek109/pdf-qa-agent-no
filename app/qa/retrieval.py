@@ -107,3 +107,53 @@ def answer_with_context(client: OpenAI, question: str, chunks: List[str], chunk_
         citations.append((int(i), snip))
 
     return answer, citations
+
+
+##################   Cache embeddings   ##################
+
+def file_sha1(path: str) -> str:
+    """
+    Beregn en SHA-1-hash for en fil.
+    Brukes som stabil nøkkel for cache (endres når innholdet endres).
+    """
+    h = hashlib.sha1()  # lager en SHA-1 hash-objekt (til identifisering, ikke til sikkerhet)
+    # Åpner filen i binærmodus (rb) – viktig for at bytes ikke endres av tekst-dekoding
+    with open(path, "rb") as f:
+        # Leser filen i biter (8192 byte) – effektivt og minnevennlig for store PDF-er
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)  # oppdaterer hash med neste bit av innholdet
+    return h.hexdigest()  # heksadesimal streng (f.eks. "a94a8fe5...") som nøkkel
+
+
+def load_cached_vectors(index_dir: str, key: str) -> np.ndarray | None:
+    """
+    Forsøk å laste embeddings fra disk-cache.
+    - index_dir: katalog hvor vi lagrer cache-filer
+    - key: nøkkel (f.eks. SHA-1 av fil + ev. modellnavn)
+    Returnerer:
+      - np.ndarray med embeddings hvis filen finnes
+      - None hvis ingen cache er lagret ennå
+    """
+    # Lager full sti til cache-filen: <index_dir>/<key>.npy
+    p = os.path.join(index_dir, f"{key}.npy")
+    # Sjekker om filen finnes – hvis ja, last inn med NumPy
+    if os.path.exists(p):
+        # np.load leser tilbake dtype/shape eksakt som ved lagring
+        return np.load(p)
+    # Ingen cache – kallende kode kan da beregne embeddings og lagre dem
+    return None
+
+
+def save_cached_vectors(index_dir: str, key: str, arr: np.ndarray) -> None:
+    """
+    Lagre embeddings til disk-cache som .npy-fil.
+    - index_dir: katalog for cache-filer (opprettes automatisk)
+    - key: nøkkel (f.eks. SHA-1 av fil + ev. modellnavn)
+    - arr: np.ndarray (typisk shape: (antall_chunks, embed_dim))
+    """
+    # Sørger for at katalogen finnes; gjør ingenting hvis den allerede finnes
+    os.makedirs(index_dir, exist_ok=True)
+    # Full sti til målfilen
+    p = os.path.join(index_dir, f"{key}.npy")
+    # Lagrer NumPy-array i binært .npy-format (hurtig og tapsfritt)
+    np.save(p, arr)
