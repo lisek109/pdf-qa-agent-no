@@ -9,30 +9,20 @@ from app.qa.chunking import clean_text, split_into_chunks
 from app.qa.retrieval import embed_texts, answer_with_context
 from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
 
-
+#Funksjon for å laste CSS
 def load_css(path: str) -> None:
     css = Path(path).read_text(encoding="utf-8")
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
-
+# Laster miljøvariabler fra .env (OpenAI-nøkkel osv.)
 load_dotenv()
+# Hovedprogram for Streamlit-app
 st.set_page_config(page_title="PDF-spørsmål (NO)", page_icon="📄")
+# Laster CSS for tilpasset styling
 load_css("assets/styles.css")
+# Tittel
 st.title("📄 PDF-agent - flere dokumenter, norsk Q&A")
 
-
-# # --- Konfigurasjon (sidefelt) ---  # 
-# with st.sidebar:
-#     # Seksjonstittel i sidepanelet
-#     st.subheader("⚙️ Konfigurasjon")
-
-#     # Tekstområde for systemprompt – kan overstyre standarden z prompts.py
-#     # Bruker kan styre stil/språk/format svarene
-#     sys_prompt = st.text_area(
-#         "Systemprompt (norsk)",
-#         value=DEFAULT_SYSTEM_PROMPT,  # fallback-tekst (definér uansett i koden)
-#         height=180
-#     )
 
 
 # --- Konfigurasjon (hovedkolonne) ---
@@ -53,8 +43,8 @@ current_sys_prompt = st.session_state.get("sys_prompt", DEFAULT_SYSTEM_PROMPT)
 
 # Filopplasting
 uploaded = st.file_uploader("Last opp en PDF-fil", type=["pdf"])
-# spm = st.text_input("Skriv inn spørsmålet ditt til dokumentet")
 
+# Spørsmålstekst
 st.markdown("### ❓ Skriv inn spørsmålet ditt til dokumentet")
 spm = st.text_area("Spørsmål", placeholder="Skriv et presist spørsmål …", height=140)
 
