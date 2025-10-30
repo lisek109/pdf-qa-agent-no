@@ -48,6 +48,11 @@ def top_k_indices(query_vec: np.ndarray, chunk_vecs: np.ndarray, k: int = 3) -> 
     S = sims[I]
     return I, S
 
+
+
+# Man kunne laget én generell funksjon som aksepterer enten chunks + idxs eller top_chunks (liste med strenger). 
+# Men det er mer lesbart – og uten behov for if-setninger – å ha to separate og enkle funksjoner
+
 def build_context(chunks: List[str], idxs: np.ndarray, limit: int = MAX_CONTEXT_CHARS) -> str:
     """
     Slår sammen top-k biter til en begrenset KONTEKST-streng.
@@ -55,6 +60,20 @@ def build_context(chunks: List[str], idxs: np.ndarray, limit: int = MAX_CONTEXT_
     parts, used = [], 0
     for i in idxs:
         piece = chunks[int(i)]
+        if used + len(piece) > limit:
+            piece = piece[: max(0, limit - used)]
+        parts.append(piece)
+        used += len(piece)
+        if used >= limit:
+            break
+    return "\n\n---\n\n".join(parts)
+
+def build_context_from_list(top_chunks: List[str], limit: int = MAX_CONTEXT_CHARS) -> str:
+    """
+    Bygger KONTEKST direkte fra en liste av utvalgte tekstbiter (Chroma-path).
+    """
+    parts, used = [], 0
+    for piece in top_chunks:
         if used + len(piece) > limit:
             piece = piece[: max(0, limit - used)]
         parts.append(piece)
@@ -107,6 +126,35 @@ def answer_with_context(client: OpenAI, question: str, chunks: List[str], chunk_
         citations.append((int(i), snip))
 
     return answer, citations
+
+
+
+##############  Lightweight variant for Chroma ##############
+
+def answer_with_top_chunks(
+    client: OpenAI,
+    question: str,
+    top_chunks: List[str],
+    system_prompt: Optional[str] = None,
+    examples: Optional[List[Tuple[str, str]]] = None,
+):
+    """
+    Lettvekts variant for Chroma: vi HAR allerede topp-chunks.
+    """
+    context = build_context_from_list(top_chunks, MAX_CONTEXT_CHARS)
+
+    msgs = [{"role": "system", "content": system_prompt or DEFAULT_SYSTEM_PROMPT}]
+    if examples:
+        for u, a in (examples or []):
+            msgs.append({"role": "user", "content": u})
+            msgs.append({"role": "assistant", "content": a})
+
+    msgs.append({"role": "user", "content": f"KONTEKST:\n{context}\n\nSPØRSMÅL: {question}"})
+
+    resp = client.chat.completions.create(model=CHAT_MODEL, messages=msgs, temperature=0)
+    answer = resp.choices[0].message.content
+    cites = [(i, re.sub(r"\s+", " ", ch[:200]).strip()) for i, ch in enumerate(top_chunks)]
+    return answer, cites
 
 
 ##################   Cache embeddings   ##################
