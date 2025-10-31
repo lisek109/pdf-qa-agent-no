@@ -112,11 +112,7 @@ def answer_with_context(client: OpenAI, question: str, chunks: List[str], chunk_
         {"role": "system", "content": system_prompt or DEFAULT_SYSTEM_PROMPT},
         {"role": "user", "content": f"KONTEKST:\n{context}\n\nSPØRSMÅL: {question}"},
     ]
-    resp = client.chat.completions.create(
-        model=CHAT_MODEL,
-        messages=msgs,
-        temperature=0
-    )
+    resp = client.chat.completions.create(model=CHAT_MODEL, messages=msgs, temperature=0)
     answer = resp.choices[0].message.content
 
     # Små sitater fra hver topp-bit – nyttig for transparens
@@ -136,21 +132,17 @@ def answer_with_top_chunks(
     question: str,
     top_chunks: List[str],
     system_prompt: Optional[str] = None,
-    examples: Optional[List[Tuple[str, str]]] = None,
 ):
     """
     Lettvekts variant for Chroma: vi HAR allerede topp-chunks.
     """
+    # 1) Bygg kontekst-streng
     context = build_context_from_list(top_chunks, MAX_CONTEXT_CHARS)
 
-    msgs = [{"role": "system", "content": system_prompt or DEFAULT_SYSTEM_PROMPT}]
-    if examples:
-        for u, a in (examples or []):
-            msgs.append({"role": "user", "content": u})
-            msgs.append({"role": "assistant", "content": a})
-
-    msgs.append({"role": "user", "content": f"KONTEKST:\n{context}\n\nSPØRSMÅL: {question}"})
-
+    msgs = [
+        {"role": "system", "content": system_prompt or DEFAULT_SYSTEM_PROMPT},
+        {"role": "user", "content": f"KONTEKST:\n{context}\n\nSPØRSMÅL: {question}"},
+    ]
     resp = client.chat.completions.create(model=CHAT_MODEL, messages=msgs, temperature=0)
     answer = resp.choices[0].message.content
     cites = [(i, re.sub(r"\s+", " ", ch[:200]).strip()) for i, ch in enumerate(top_chunks)]

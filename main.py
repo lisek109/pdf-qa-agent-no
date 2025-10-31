@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from app.parsers.pdf import extract_pages
 from app.qa.chunking import split_pages_into_chunks
-from app.qa.retrieval import embed_texts, answer_with_context, file_sha1, load_cached_vectors, save_cached_vectors
+from app.qa.retrieval import embed_texts, answer_with_context, file_sha1, load_cached_vectors, save_cached_vectors, answer_with_top_chunks
+from app.qa.vectorstore_chroma import  get_client, get_collection, upsert_chunks, query_topk
 from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
 
 #Funksjon for å laste CSS
@@ -23,8 +24,6 @@ load_css("assets/styles.css")
 # Tittel
 st.title("📄 PDF Assistent ")
 
-
-
 # --- Konfigurasjon (hovedkolonne) ---
 with st.expander("⚙️ Konfigurasjon av systemprompt", expanded=False):
     with st.form(key="sys_prompt_form_main", border=True):
@@ -37,8 +36,12 @@ with st.expander("⚙️ Konfigurasjon av systemprompt", expanded=False):
 
     if use_prompt_btn:
         st.session_state["sys_prompt"] = sys_prompt_input
-
+        
+# Henter gjeldende systemprompt (brukerens eller default)
 current_sys_prompt = st.session_state.get("sys_prompt", DEFAULT_SYSTEM_PROMPT)
+
+# --- Sidepanel for valg av Retriever---
+retriever_mode = st.sidebar.radio("Retriever", ["Lokal (NumPy)", "ChromaDB"], index=1)
 
 
 # Filopplasting
@@ -49,21 +52,14 @@ if uploaded:
     os.makedirs("data/raw", exist_ok=True)
     # Lagrer filen - HUSK Å LEGGE TIL EN SKJEKK OM DET ALLEREDE EKSISTERER FIL MED SAMME NAVN
     pdf_path = os.path.join("data", "raw", uploaded.name)
+    # Sjekker om filen allerede finnes
+    if os.path.exists(pdf_path):
+        st.warning(f"Filen '{uploaded.name}' finnes allerede i mappen.")
     # åpner i binary mode for å unngå encoding-problemer w-write b-binary
     with open(pdf_path, "wb") as f:
         # skriver buffer direkte til fil
         f.write(uploaded.getbuffer())
     st.success(f"Lagret: {uploaded.name}")
-
-
-
-
-# # Spørsmålstekst
-# st.markdown("### ❓ Skriv inn spørsmålet ditt til dokumentet")
-# spm = st.text_area("Spørsmål", placeholder="Skriv et presist spørsmål …", height=140)
-
-
-
 
 
 
@@ -73,47 +69,86 @@ pdf_files = sorted(glob.glob("data/raw/*.pdf"))
 choice = st.sidebar.selectbox("Velg dokument fra mappen", pdf_files, index=0 if pdf_files else None)
 st.sidebar.caption("Legg PDF-er i data/raw/ og oppdater listen.")
 
-# spm = st.text_input("Skriv inn spørsmålet ditt til dokumentet")
-
 st.markdown("### ❓ Skriv inn spørsmålet ditt til dokumentet")
 with st.form(key="question_form"):
     spm = st.text_area("Spørsmål", placeholder="Skriv et presist spørsmål …", height=140)
     submit_btn = st.form_submit_button("💬 Send")
 
 if choice:
-    st.write(f"**Aktivt dokument:** {os.path.basename(choice)}")
     with st.spinner("Leser og deler opp per side..."):
-        pages = extract_pages(choice)
-        chunks_meta = split_pages_into_chunks(pages, size=1200, overlap=180)
-        chunks = [c["content"] for c in chunks_meta]
+         pages = extract_pages(choice)
+         chunks_meta = split_pages_into_chunks(pages, size=1200, overlap=180)
+         chunks = [c["content"] for c in chunks_meta]
+    
+    key = file_sha1(choice)
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    # metadata til Chroma (doc + page/start/end)
+    metadatas = [{"doc": key, "page": c["page"], "start": c["start"], "end": c["end"]} for c in chunks_meta]
+
+    
+    st.write(f"**Aktivt dokument:** {os.path.basename(choice)}")
+    # with st.spinner("Leser og deler opp per side..."):
+    #     pages = extract_pages(choice)
+    #     chunks_meta = split_pages_into_chunks(pages, size=1200, overlap=180)
+    #     chunks = [c["content"] for c in chunks_meta]
 
     st.write(f"**Antall chunks:** {len(chunks)}")
-
-    # --- Embeddings cache pr. fil ---
-    key = file_sha1(choice)
-    vecs = load_cached_vectors("indexes", key)
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-    if vecs is None:
-        with st.spinner("Lager embeddings (første gang for dette dokumentet)..."):
-            vecs = embed_texts(client, chunks)
-            save_cached_vectors("indexes", key, vecs)
-        st.success("Indeksering fullført (cache lagret).")
-
-    # --- Spørsmål → svar ---
-    if submit_btn and spm:
-        with st.spinner("Søker i dokumentet og genererer svar..."):
-            answer, cites = answer_with_context(client, spm, chunks, vecs, k=3)
+    
+    
+    if retriever_mode == "ChromaDB":
+        client_ch = get_client(persist_dir="data/chroma")
+        coll = get_collection(client_ch, name="pdf_chunks")
+        
+        # Indekser kun hvis det ikke finnes eksisterende poster for dette dokumentet
+        exists = coll.get(where={"doc": key}, limit=1)
+        if not exists.get("ids"):
+            upsert_chunks(coll, doc_id=key, chunks=chunks, metadatas=metadatas)
+            st.success("Indeksering fullført (Chroma).")
+        
+        if submit_btn and spm:
+            hits = query_topk(coll, spm, k=3, where={"doc": key})
+            top_chunks = [h[1] for h in hits]  # teksty chunków
+            answer, cites = answer_with_top_chunks(
+                client, spm, top_chunks,
+                system_prompt=current_sys_prompt # NEW: brukerens/standard prompt
+        )
 
         st.markdown("### ✅ Svar")
         st.write(answer)
-
         with st.expander("Vis sitater (med side)"):
-            for i, snip in cites:
-                page = chunks_meta[i]["page"]
-                st.markdown(f"**Chunk {i} – side {page}:**\n\n> {snip} …")
+            for i, (hid, text, meta) in enumerate(hits):
+                st.markdown(f"**Treff {i+1} – side {meta.get('page')}**  \n> {text[:200]} …")
+    
+    else:
+
+        # --- Embeddings cache pr. fil ---
+        #key = file_sha1(choice)
+        vecs = load_cached_vectors("indexes", key)
+        #client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        if vecs is None:
+            with st.spinner("Lager embeddings (første gang for dette dokumentet)..."):
+                vecs = embed_texts(client, chunks)
+                save_cached_vectors("indexes", key, vecs)
+            st.success("Indeksering fullført (cache lagret).")
+
+        # --- Spørsmål → svar ---
+        if submit_btn and spm:
+            with st.spinner("Søker i dokumentet og genererer svar..."):
+                answer, cites = answer_with_context(client, spm, chunks, vecs, k=3,
+                system_prompt=current_sys_prompt  # NEW: brukerens/standard prompt
+                )
+                
+
+            st.markdown("### ✅ Svar")
+            st.write(answer)
+
+            with st.expander("Vis sitater (med side)"):
+                for i, snip in cites:
+                    page = chunks_meta[i]["page"]
+                    st.markdown(f"**Chunk {i} – side {page}:**\n\n> {snip} …")
 else:
-    st.info("Legg inn PDF-er i `data/raw/`, velg ett i venstremenyen og still et spørsmål.")
+        st.info("Legg inn PDF-er i `data/raw/`, velg ett i venstremenyen og still et spørsmål.")
 
 
 # if uploaded:
