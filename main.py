@@ -18,7 +18,7 @@ def load_css(path: str) -> None:
 # Laster miljøvariabler fra .env (OpenAI-nøkkel osv.)
 load_dotenv()
 # Hovedprogram for Streamlit-app
-st.set_page_config(page_title="PDF-spørsmål (NO)", page_icon="📄")
+st.set_page_config(page_title="PDF-spørsmål (NO)", page_icon="📄", layout="wide")
 # Laster CSS for tilpasset styling
 load_css("assets/styles.css")
 # Tittel
@@ -111,13 +111,13 @@ if choice:
             answer, cites = answer_with_top_chunks(
                 client, spm, top_chunks,
                 system_prompt=current_sys_prompt # NEW: brukerens/standard prompt
-        )
+            )
 
-        st.markdown("### ✅ Svar")
-        st.write(answer)
-        with st.expander("Vis sitater (med side)"):
-            for i, (hid, text, meta) in enumerate(hits):
-                st.markdown(f"**Treff {i+1} – side {meta.get('page')}**  \n> {text[:200]} …")
+            st.markdown("### ✅ Svar")
+            st.write(answer)
+            with st.expander("Vis sitater (med side)"):
+                for i, (hid, text, meta) in enumerate(hits):
+                    st.markdown(f"**Treff {i+1} – side {meta.get('page')}**  \n> {text[:200]} …")
     
     else:
 
