@@ -5,9 +5,7 @@ __pycache__/
 *.pyd
 *.log
 data/raw/
-data/processed/
 indexes/
-faiss_index/
 .vscode/
 .idea/
 .env
