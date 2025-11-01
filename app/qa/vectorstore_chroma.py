@@ -7,10 +7,12 @@ from langchain_openai import OpenAIEmbeddings
 
 # Laster miljøvariabler fra .env (OpenAI-nøkkel osv.)
 load_dotenv()
+EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
 
 # Global embedding-funksjon (OpenAI) – brukes både for dokumenter og spørringer
-_embeddings = OpenAIEmbeddings(model="text-embedding-3-small",
-    api_key=os.getenv("OPENAI_API_KEY"))
+_embeddings = OpenAIEmbeddings(model=EMBED_MODEL, api_key=OPENAI_API_KEY)
 
 def get_client(persist_dir: str = "data/chroma") -> chromadb.Client:
     """

@@ -6,10 +6,11 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from app.parsers.pdf import extract_pages
 from app.qa.chunking import split_pages_into_chunks
-from app.qa.retrieval import embed_texts, answer_with_context, file_sha1, load_cached_vectors, save_cached_vectors, answer_with_top_chunks
+from app.qa.retrieval import embed_texts, answer_with_context, file_sha1, load_cached_vectors, save_cached_vectors, answer_with_top_chunks, cache_key_for_file
 from app.qa.vectorstore_chroma import  get_client, get_collection, upsert_chunks, query_topk
 from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
 
+EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
     
 #Funksjon for å laste CSS
 def load_css(path: str) -> None:
@@ -89,15 +90,14 @@ if choice:
          chunks_meta = split_pages_into_chunks(pages, size=1200, overlap=180)
          chunks = [c["content"] for c in chunks_meta]
     
-    key = file_sha1(choice)
+    # Lager en stabil nøkkel for dokumentet (SHA-1 + modellnavn)
+    key = cache_key_for_file(choice, EMBED_MODEL)
 
     # metadata til Chroma (doc + page/start/end)
     metadatas = [{"doc": key, "page": c["page"], "start": c["start"], "end": c["end"]} for c in chunks_meta]
 
-    
     st.write(f"**Aktivt dokument:** {os.path.basename(choice)}")
     st.write(f"**Antall chunks:** {len(chunks)}")
-    
     
     if retriever_mode == "ChromaDB":
         client_ch = get_client(persist_dir="data/chroma")
@@ -127,9 +127,7 @@ if choice:
                     st.markdown(f"**Treff {i+1} – side {meta.get('page')}**  \n> {text[:200]} …")
     
     else:
-
         # --- Embeddings cache pr. fil ---
-       
         vecs = load_cached_vectors("indexes", key)
 
         if vecs is None:

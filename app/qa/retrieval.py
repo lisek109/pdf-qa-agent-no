@@ -9,8 +9,8 @@ from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
 
 
 # Konfig for modeller og Hvor mye kontekst vi maks pakker inn i promptet
-EMBED_MODEL = "text-embedding-3-small"
-CHAT_MODEL = "gpt-4o-mini"
+EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
+CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o-mini")
 MAX_CONTEXT_CHARS = 2200  # begrens prompt-lengde, kost og latens
 
 def l2_normalize(mat: np.ndarray) -> np.ndarray:
@@ -150,6 +150,9 @@ def answer_with_top_chunks(
 
 
 ##################   Cache embeddings   ##################
+
+def cache_key_for_file(path: str, embed_model: str) -> str:
+    return f"{file_sha1(path)}::{embed_model}"
 
 def file_sha1(path: str) -> str:
     """
