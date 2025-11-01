@@ -37,6 +37,6 @@ pip install -r requirements.txt
 
 4. Start UI:
 
-streamlit run app/main.py
+streamlit run main.py
 
 
