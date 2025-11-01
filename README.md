@@ -18,14 +18,20 @@ En lettvektsløsning som besvarer spørsmål direkte fra et PDF-dokument ved hje
    # legg inn OPENAI_API_KEY i .env
 
 
-2. Opprett og aktiver virtuelt miljø (Windows PowerShell):
+2. Opprett og aktiver virtuelt miljø :
 
+Windows PowerShell
 
 py -3.12 -m venv .venv
 # Hvis du får "running scripts is disabled", se Troubleshooting under.
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 macOS / Linux:
+
+python3.12 -m venv .venv
+source .venv/bin/activate
+
+macOS / Linux
 
 python3.12 -m venv .venv
 source .venv/bin/activate
