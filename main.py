@@ -10,17 +10,26 @@ from app.qa.retrieval import embed_texts, answer_with_context, file_sha1, load_c
 from app.qa.vectorstore_chroma import  get_client, get_collection, upsert_chunks, query_topk
 from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
 
+    
 #Funksjon for å laste CSS
 def load_css(path: str) -> None:
-    css = Path(path).read_text(encoding="utf-8")
-    st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+    try:
+        css = Path(path).read_text(encoding="utf-8")
+        st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+    except FileNotFoundError:
+        #  Robust mot manglende styles.css
+        st.debug("styles.css ikke funnet - fortsetter uten egen CSS.")  # trygg logg-linje
+
 
 # Laster miljøvariabler fra .env (OpenAI-nøkkel osv.)
 load_dotenv()
+
 # Hovedprogram for Streamlit-app
 st.set_page_config(page_title="PDF-spørsmål (NO)", page_icon="📄", layout="wide")
+
 # Laster CSS for tilpasset styling
 load_css("assets/styles.css")
+
 # Tittel
 st.title("📄 PDF Assistent ")
 
@@ -50,16 +59,17 @@ uploaded = st.file_uploader("Last opp en PDF-fil", type=["pdf"])
 if uploaded:
     # Lager folder hvis den ikke finnes
     os.makedirs("data/raw", exist_ok=True)
-    # Lagrer filen - HUSK Å LEGGE TIL EN SKJEKK OM DET ALLEREDE EKSISTERER FIL MED SAMME NAVN
+    # Lager path for lagring av filen
     pdf_path = os.path.join("data", "raw", uploaded.name)
     # Sjekker om filen allerede finnes
     if os.path.exists(pdf_path):
-        st.warning(f"Filen '{uploaded.name}' finnes allerede i mappen.")
-    # åpner i binary mode for å unngå encoding-problemer w-write b-binary
-    with open(pdf_path, "wb") as f:
-        # skriver buffer direkte til fil
-        f.write(uploaded.getbuffer())
-    st.success(f"Lagret: {uploaded.name}")
+        st.warning(f"Filen '{uploaded.name}' finnes allerede i mappen. Endre navn og prøv igjen.")
+    else:
+        # åpner i binary mode for å unngå encoding-problemer w-write b-binary
+        with open(pdf_path, "wb") as f:
+            # skriver buffer direkte til fil
+            f.write(uploaded.getbuffer())
+        st.success(f"Lagret: {uploaded.name}")
 
 
 
@@ -106,8 +116,8 @@ if choice:
             st.success("Indeksering fullført (Chroma).")
         
         if submit_btn and spm:
-            #ograniczasz wyszukiwanie tylko do chunków z jednego dokumentu (tego o hash key). 
-            #Dzięki temu masz kontrolę nad tym, z którego dokumentu pochodzą wyniki.
+            #begrensser søk til chunk fra kun et dokument (dokument med hash key). 
+            #på denne måten har jeg kontroll fra hvilken  dokument kommer resultat
             hits = query_topk(coll, spm, k=3, where={"doc": key})
             top_chunks = [h[1] for h in hits]  # teksty chunków
             answer, cites = answer_with_top_chunks(
