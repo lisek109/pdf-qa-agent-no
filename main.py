@@ -106,6 +106,8 @@ if choice:
             st.success("Indeksering fullført (Chroma).")
         
         if submit_btn and spm:
+            #ograniczasz wyszukiwanie tylko do chunków z jednego dokumentu (tego o hash key). 
+            #Dzięki temu masz kontrolę nad tym, z którego dokumentu pochodzą wyniki.
             hits = query_topk(coll, spm, k=3, where={"doc": key})
             top_chunks = [h[1] for h in hits]  # teksty chunków
             answer, cites = answer_with_top_chunks(

@@ -19,7 +19,7 @@ def get_client(persist_dir: str = "data/chroma") -> chromadb.Client:
     """
     os.makedirs(persist_dir, exist_ok=True)
     return chromadb.Client(Settings(is_persistent=True, persist_directory=persist_dir))
-    # Merk: I nyere Chroma kan man også bruke chromadb.PersistentClient(path=...)
+    # Merknadd: I nyere Chroma kan man også bruke chromadb.PersistentClient(path=...)
 
 def get_collection(client: chromadb.Client, name: str = "pdf_chunks"):
     """
