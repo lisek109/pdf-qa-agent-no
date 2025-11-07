@@ -45,7 +45,8 @@ def split_into_chunks(text: str, size: int = 1000, overlap: int = 150) -> List[s
     return splitter.split_text(text)
 
 
-def split_pages_into_chunks(pages: List[Tuple[int, str]], size: int = 1200, overlap: int = 150) -> List[Dict]:
+def split_pages_into_chunks(pages: List[Tuple[int, str]], size: int = 1200, overlap: int = 150,
+    adaptive: bool = True) -> List[Dict]:
     """
     Deler tekst side for side og returnerer en liste med metadata per chunk.
     Struktur per element:
@@ -74,11 +75,20 @@ def split_pages_into_chunks(pages: List[Tuple[int, str]], size: int = 1200, over
     for page_no, raw in pages:
         # Rens tesk
         text = clean_text(raw)
+        
+        
+        if adaptive:
+            # Beregn chunk_size og overlap dynamisk basert på side-lengde
+            chunk_size = max(300, int(len(text) * 0.2))
+            overlap_size = max(50, int(chunk_size * 0.1))
+        else:
+            chunk_size = size
+            overlap_size = overlap
 
         # Initialiser tekstsplitter for denne siden
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=size,
-            chunk_overlap=overlap,
+            chunk_size=chunk_size,
+            chunk_overlap=overlap_size,
             separators=["\n\n", "\n", ". ", " "]
         )
 
@@ -102,11 +112,14 @@ def split_pages_into_chunks(pages: List[Tuple[int, str]], size: int = 1200, over
                 idx = offset
 
             # Legg til chunk med sideinformasjon og beregnet posisjon.
+            # start, end og mode brukes ikke aktivt akkurat nå, 
+            # men det er nyttig å ha dem tilgjengelig for fremtidig funksjonalitet (f.eks. highlighting, analyse eller filtrering).
             chunks.append({
                 "page": page_no,
                 "content": part,
                 "start": idx,
-                "end": idx + len(part)
+                "end": idx + len(part),
+                "mode": "adaptive" if adaptive else "static"
             })
 
             # Flytt offset for neste søk, slik at vi ikke matcher samme område igjen.
