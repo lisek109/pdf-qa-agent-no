@@ -53,6 +53,16 @@ current_sys_prompt = st.session_state.get("sys_prompt", DEFAULT_SYSTEM_PROMPT)
 # --- Sidepanel for valg av Retriever---
 retriever_mode = st.sidebar.radio("Retriever", ["Lokal (NumPy)", "ChromaDB"], index=1)
 
+# --- Sidepanel for adaptiv chunking ---
+adaptive_chunking = st.sidebar.checkbox("Adaptiv chunking (prosentbasert)", value=True)
+if adaptive_chunking:
+    st.sidebar.markdown(
+        """
+        **Merk:** Ved adaptiv chunking justeres chunk-størrelsen basert på dokumentets totale lengde.
+        Dette kan forbedre ytelsen for både små og store dokumenter.
+        """
+    )
+
 # Sørg for at nødvendig mappe finnes
 os.makedirs("data/raw", exist_ok=True) 
 
@@ -75,9 +85,16 @@ if uploaded:
 
 
 # --- Velg dokument fra mappe ---
+st.sidebar.markdown("<br><br>", unsafe_allow_html=True)  # Legger til litt luft 
+st.sidebar.markdown("### 📄 Velg dokument fra mappen") # Større overskrift
+
 pdf_files = sorted(glob.glob("data/raw/*.pdf"))
-choice = st.sidebar.selectbox("Velg dokument fra mappen", pdf_files, index=0 if pdf_files else None)
+# Valg av dokument, label_visibility="collapsed" skjuler label- dette for å unngå dobbel label og exepct når listen er tom
+choice = st.sidebar.selectbox("Velg dokument fra mappen", pdf_files, index=0 if pdf_files else None, label_visibility="collapsed")
+# choice = st.sidebar.selectbox("", pdf_files, index=0 if pdf_files else None)
 st.sidebar.caption("Legg PDF-er i data/raw/ og oppdater listen.")
+
+
 
 st.markdown("### ❓ Skriv inn spørsmålet ditt til dokumentet")
 with st.form(key="question_form"):
@@ -87,11 +104,11 @@ with st.form(key="question_form"):
 if choice:
     with st.spinner("Leser og deler opp per side..."):
          pages = extract_pages(choice)
-         chunks_meta = split_pages_into_chunks(pages, size=1200, overlap=180)
+         chunks_meta = split_pages_into_chunks(pages, size=1200, overlap=180, adaptive=adaptive_chunking)
          chunks = [c["content"] for c in chunks_meta]
     
-    # Lager en stabil nøkkel for dokumentet (SHA-1 + modellnavn)
-    key = cache_key_for_file(choice, EMBED_MODEL)
+    # Lager en stabil nøkkel for dokumentet (SHA-1 + modellnavn+ chunking)
+    key = cache_key_for_file(choice, EMBED_MODEL, adaptive_chunking)
 
     # metadata til Chroma (doc + page/start/end)
     metadatas = [{"doc": key, "page": c["page"], "start": c["start"], "end": c["end"]} for c in chunks_meta]
@@ -114,7 +131,7 @@ if choice:
             #på denne måten har jeg kontroll fra hvilken  dokument kommer resultat
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             hits = query_topk(coll, spm, k=3, where={"doc": key})
-            top_chunks = [h[1] for h in hits]  # teksty chunków
+            top_chunks = [h[1] for h in hits]  # chunk-tekster fra treffene
             answer, cites = answer_with_top_chunks(
                 client, spm, top_chunks,
                 system_prompt=current_sys_prompt # NEW: brukerens/standard prompt
@@ -124,7 +141,7 @@ if choice:
             st.write(answer)
             with st.expander("Vis sitater (med side)"):
                 for i, (hid, text, meta) in enumerate(hits):
-                    st.markdown(f"**Treff {i+1} – side {meta.get('page')}**  \n> {text[:200]} …")
+                    st.markdown(f"**Treff {i+1} - side {meta.get('page')}**  \n> {text[:200]} …")
     
     else:
         # --- Embeddings cache pr. fil ---
@@ -142,7 +159,7 @@ if choice:
             with st.spinner("Søker i dokumentet og genererer svar..."):
                 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
                 answer, cites = answer_with_context(client, spm, chunks, vecs, k=3,
-                system_prompt=current_sys_prompt  # NEW: brukerens/standard prompt
+                system_prompt=current_sys_prompt  # brukerens/standard prompt
                 )
                 
 

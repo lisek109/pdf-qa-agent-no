@@ -151,8 +151,10 @@ def answer_with_top_chunks(
 
 ##################   Cache embeddings   ##################
 
-def cache_key_for_file(path: str, embed_model: str) -> str:
-    return f"{file_sha1(path)}::{embed_model}"
+# Når vi bytter embedding-modell (dimensjon/semantikk), får cache en ny nøkkel.
+# Hindrer gjenbruk av gamle vektorer laget med en annen modell.
+def cache_key_for_file(path: str, embed_model: str, adaptive_chunking: bool) -> str:
+    return f"{file_sha1(path)}__{embed_model}_{'adaptive' if adaptive_chunking else 'static'}"
 
 def file_sha1(path: str) -> str:
     """
