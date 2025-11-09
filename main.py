@@ -9,6 +9,7 @@ from app.qa.chunking import split_pages_into_chunks
 from app.qa.retrieval import embed_texts, answer_with_context, file_sha1, load_cached_vectors, save_cached_vectors, answer_with_top_chunks, cache_key_for_file
 from app.qa.vectorstore_chroma import  get_client, get_collection, upsert_chunks, query_topk
 from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
+from app.classifier.infer import classify_document_ml
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
     
@@ -106,12 +107,16 @@ if choice:
          pages = extract_pages(choice)
          chunks_meta = split_pages_into_chunks(pages, size=1200, overlap=180, adaptive=adaptive_chunking)
          chunks = [c["content"] for c in chunks_meta]
+         
+    doc_preview = " ".join(chunks)[:8000]
+    doc_class, doc_score = classify_document_ml(doc_preview)  # ENDRING: ML
+    st.caption(f"📄 Klassifisering: **{doc_class}** (score {doc_score:.2f})")
     
     # Lager en stabil nøkkel for dokumentet (SHA-1 + modellnavn+ chunking)
     key = cache_key_for_file(choice, EMBED_MODEL, adaptive_chunking)
 
     # metadata til Chroma (doc + page/start/end)
-    metadatas = [{"doc": key, "page": c["page"], "start": c["start"], "end": c["end"]} for c in chunks_meta]
+    metadatas = [{"doc": key, "page": c["page"], "start": c["start"], "end": c["end"], "class": doc_class} for c in chunks_meta]
 
     st.write(f"**Aktivt dokument:** {os.path.basename(choice)}")
     st.write(f"**Antall chunks:** {len(chunks)}")
