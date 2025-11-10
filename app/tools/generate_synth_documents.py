@@ -123,3 +123,6 @@ if __name__ == "__main__":
     ap.add_argument("--out", type=str, default="data/training/documents.csv", help="Sti til CSV")
     args = ap.parse_args()
     main(args.n_per_class, args.out)
+    
+#kjøre eksempel
+# python -m app.tools.generate_synth_documents --n_per_class 100 --out data/training/documents.csv

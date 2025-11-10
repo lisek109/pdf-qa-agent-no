@@ -12,13 +12,13 @@ from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer  # Tekst → numerisk vektor
 from sklearn.linear_model import LogisticRegression           # Klassifikator
 from sklearn.calibration import CalibratedClassifierCV        # Kalibrerer sannsynligheter
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import make_pipeline
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
 import joblib
 
 
-def build_pipeline():
+def build_pipeline(X_train, y_train):
     # Lager en pipeline med TF-IDF + logistisk regresjon
     vec = TfidfVectorizer(
         lowercase=True,           # Konverterer tekst til små bokstaver
@@ -27,18 +27,24 @@ def build_pipeline():
         min_df=2,                 # Ignorerer ord som forekommer færre enn 2 ganger
         max_features=200_000      # Maksimalt antall funksjoner (ordkombinasjoner)
     )
+    
+    X_train_tfidf = vec.fit_transform(X_train)
 
+    # Initialiserer logistisk regresjonsmodell
     clf = LogisticRegression(
         max_iter=2000,            # Maks antall iterasjoner for trening
         n_jobs=None,              # Bruker én CPU-kjerne
         class_weight="balanced"  # Justerer for ubalanserte klasser
     )
 
-    pipe = Pipeline([
-        ("tfidf", vec),           # Først: TF-IDF-transformasjon(Term Frequency hvor ofte ordet er i dokumentet-Inverse Document Frequency hvpot skeldent ord er i hele korpuset)
-        ("clf", CalibratedClassifierCV(base_estimator=clf, cv=3, method="sigmoid"))
-        # Deretter: Kalibrert klassifikator med 3-fold kryssvalidering
-    ])
+    # Kalibrerer klassifikatoren for bedre sannsynlighetsestimater
+    cal_clf = CalibratedClassifierCV(estimator=clf, cv=3, method="sigmoid")
+    #cal_clf.fit(X_train_tfidf, y_train)
+
+    # Setter sammen pipeline
+    pipe = make_pipeline(vec, cal_clf)
+    
+    pipe.fit(X_train, y_train)
     return pipe                  # Returnerer den komplette pipeline-modellen
 
 
@@ -56,8 +62,8 @@ def main(args):
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    pipe = build_pipeline() # Lager modell-pipeline
-    pipe.fit(X_train, y_train) # Trener modellen
+    pipe = build_pipeline(X_train, y_train) # Lager modell-pipeline
+    
     y_pred = pipe.predict(X_val) # Predikerer på valideringssettet
     print(classification_report(y_val, y_pred, digits=3)) # Viser klassifiseringsrapport
 
@@ -77,3 +83,7 @@ if __name__ == "__main__":
     
     # kjøringseksempel:
     # python train_classifier.py --input data/training/documents.csv --outdir models/docclf
+
+
+
+
