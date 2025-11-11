@@ -42,7 +42,7 @@ def build_pipeline(X_train, y_train):
     #cal_clf.fit(X_train_tfidf, y_train)
 
     # Setter sammen pipeline
-    pipe = make_pipeline(vec, cal_clf)
+    pipe = make_pipeline(vec, cal_clf) 
     
     pipe.fit(X_train, y_train)
     return pipe                  # Returnerer den komplette pipeline-modellen
