@@ -10,6 +10,7 @@ from app.qa.retrieval import embed_texts, answer_with_context, file_sha1, load_c
 from app.qa.vectorstore_chroma import  get_client, get_collection, upsert_chunks, query_topk
 from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
 from app.classifier.infer import classify_document_ml
+from app.router_llm import classify_question_llm   
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
     
@@ -34,6 +35,15 @@ load_css("assets/styles.css")
 
 # Tittel
 st.title("📄 PDF Assistent ")
+
+# --- Globalt omfang vs ett dokument (UI på hovedsiden) ---
+col_a, col_b = st.columns([1, 4])
+with col_a:
+    # ENDRING: toggle bestemmer om vi jobber på hele korpuset
+    global_mode = st.toggle("Alle dokumenter", value=False, help="Søk på tvers av alle dokumenter")
+# Behold en streng-variant som resten av koden bruker
+scope = "Alle dokumenter" if global_mode else "Kun valgt dokument"
+st.session_state["scope"] = scope  # valgfritt: gjør tilgjengelig senere
 
 # --- Konfigurasjon (hovedkolonne) ---
 with st.expander("⚙️ Konfigurasjon av systemprompt", expanded=False):
@@ -112,11 +122,13 @@ if choice:
     doc_class, doc_score = classify_document_ml(doc_preview)  # ENDRING: ML
     st.caption(f"📄 Klassifisering: **{doc_class}** (score {doc_score:.2f})")
     
+    filename = os.path.basename(choice)
+    
     # Lager en stabil nøkkel for dokumentet (SHA-1 + modellnavn+ chunking)
     key = cache_key_for_file(choice, EMBED_MODEL, adaptive_chunking)
 
     # metadata til Chroma (doc + page/start/end)
-    metadatas = [{"doc": key, "page": c["page"], "start": c["start"], "end": c["end"], "class": doc_class} for c in chunks_meta]
+    metadatas = [{"doc": key, "filename": filename, "page": c["page"], "start": c["start"], "end": c["end"], "class": doc_class} for c in chunks_meta]
 
     st.write(f"**Aktivt dokument:** {os.path.basename(choice)}")
     st.write(f"**Antall chunks:** {len(chunks)}")
@@ -130,12 +142,29 @@ if choice:
         if not exists.get("ids"):
             upsert_chunks(coll, doc_id=key, chunks=chunks, metadatas=metadatas)
             st.success("Indeksering fullført (Chroma).")
+            
+        LABELS = ["faktura", "bestilling", "rapport", "annet", "kostnadsoverslag", "kontrakt"]
         
         if submit_btn and spm:
-            #begrensser søk til chunk fra kun et dokument (dokument med hash key). 
-            #på denne måten har jeg kontroll fra hvilken  dokument kommer resultat
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            hits = query_topk(coll, spm, k=3, where={"doc": key})
+            
+            where = {}
+            if scope == "Kun valgt dokument":
+                where["doc"] = key
+            else:
+                # ENDRING: LLM-router snevrer søket til klasse
+                label, conf = classify_question_llm(spm, LABELS, threshold=0.55)
+                st.caption(f"🧭 Intent (LLM): **{label}** (conf {conf:.2f})")
+                if label != "annet":
+                    where["class"] = {"$in": [label]}
+           
+            hits = query_topk(coll, spm, k=3, where=where)
+            
+            # Fallback: hvis ingen treff i snevret søk (kun for 'Alle dokumenter')
+            if not hits and scope == "Alle dokumenter":
+                hits = query_topk(coll, spm, k=3, where={})
+            
+            
             top_chunks = [h[1] for h in hits]  # chunk-tekster fra treffene
             answer, cites = answer_with_top_chunks(
                 client, spm, top_chunks,
