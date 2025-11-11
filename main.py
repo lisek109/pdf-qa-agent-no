@@ -1,4 +1,4 @@
-import os
+import os, uuid
 from pathlib import Path
 import re, glob
 import streamlit as st
@@ -22,6 +22,17 @@ def load_css(path: str) -> None:
     except FileNotFoundError:
         #  Robust mot manglende styles.css
         st.debug("styles.css ikke funnet - fortsetter uten egen CSS.")  # trygg logg-linje
+        
+        
+# Funksjon for å prioritere chunks basert på nøkkelord
+def prioritize_chunks_by_keywords(query: str, hits, topk: int = 3):
+    # hits: liste av (id, text, meta)
+    toks = [t for t in re.split(r"[\W_]+", query.lower()) if len(t) > 2]
+    def score(text: str) -> int:
+        tl = text.lower()
+        return sum(1 for t in toks if t in tl)
+    ranked = sorted(hits, key=lambda h: score(h[1]), reverse=True)
+    return ranked[:topk]
 
 
 # Laster miljøvariabler fra .env (OpenAI-nøkkel osv.)
@@ -81,17 +92,29 @@ os.makedirs("data/raw", exist_ok=True)
 uploaded = st.file_uploader("Last opp en PDF-fil", type=["pdf"])
 
 if uploaded:
-    # Lager path for lagring av filen
-    pdf_path = os.path.join("data", "raw", uploaded.name)
-    # Sjekker om filen allerede finnes
+    # ENDRING: lag en trygg filsti og auto-unik navn ved kollisjon
+    base_dir = os.path.join("data", "raw")
+    os.makedirs(base_dir, exist_ok=True)
+
+    # enkel sanitizing + behold originalt navn hvis mulig
+    orig_name = os.path.basename(uploaded.name).replace("\\","_").replace("/","_").strip()
+    if not orig_name.lower().endswith(".pdf"):
+        orig_name += ".pdf"
+
+    pdf_path = os.path.join(base_dir, orig_name)
+
+    # Hvis finnes: legg til kort UUID-suffiks automatisk
     if os.path.exists(pdf_path):
-        st.warning(f"Filen '{uploaded.name}' finnes allerede i mappen. Endre navn og prøv igjen.")
-    else:
-        # åpner i binary mode for å unngå encoding-problemer w-write b-binary
-        with open(pdf_path, "wb") as f:
-            # skriver buffer direkte til fil
-            f.write(uploaded.getbuffer())
-        st.success(f"Lagret: {uploaded.name}")
+        stem, ext = os.path.splitext(orig_name)
+        new_name = f"{stem}-{uuid.uuid4().hex[:6]}{ext}"
+        pdf_path = os.path.join(base_dir, new_name)
+
+    # skriv filen
+    with open(pdf_path, "wb") as f:
+        f.write(uploaded.getbuffer())
+
+    # vis endelig navn (kan være auto-justert)
+    st.success(f"Lagret: {os.path.basename(pdf_path)}")
 
 
 
@@ -151,7 +174,8 @@ if scope == "Kun valgt dokument" and choice:
         if submit_btn and spm:
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             where = {"doc": key}  # NB: alltid kun valgt dokument i denne grenen
-            hits = query_topk(coll, spm, k=3, where=where)
+            hits = query_topk(coll, spm, k=8, where=where)
+            hits = prioritize_chunks_by_keywords(spm, hits, topk=3)
             if not hits:
                 st.warning("Ingen treff i valgt dokument.")
             top_chunks = [h[1] for h in hits]
@@ -160,36 +184,7 @@ if scope == "Kun valgt dokument" and choice:
             with st.expander("Vis sitater (med side)"):
                 for i, (hid, text, meta) in enumerate(hits):
                     st.markdown(f"**Treff {i+1} – side {meta.get('page')}**  \n> {text[:200]} …")
-            # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            
-            # where = {}
-            # if scope == "Kun valgt dokument":
-            #     where["doc"] = key
-            # else:
-            #     # ENDRING: LLM-router snevrer søket til klasse
-            #     label, conf = classify_question_llm(spm, LABELS, threshold=0.55)
-            #     st.caption(f"🧭 Intent (LLM): **{label}** (conf {conf:.2f})")
-            #     if label != "annet":
-            #         where["class"] = {"$in": [label]}
-           
-            # hits = query_topk(coll, spm, k=3, where=where)
-            
-            # # Fallback: hvis ingen treff i snevret søk (kun for 'Alle dokumenter')
-            # if not hits and scope == "Alle dokumenter":
-            #     hits = query_topk(coll, spm, k=3, where={})
-            
-            
-            # top_chunks = [h[1] for h in hits]  # chunk-tekster fra treffene
-            # answer, cites = answer_with_top_chunks(
-            #     client, spm, top_chunks,
-            #     system_prompt=current_sys_prompt # NEW: brukerens/standard prompt
-            # )
-
-            # st.markdown("### ✅ Svar")
-            # st.write(answer)
-            # with st.expander("Vis sitater (med side)"):
-            #     for i, (hid, text, meta) in enumerate(hits):
-            #         st.markdown(f"**Treff {i+1} - side {meta.get('page')}**  \n> {text[:200]} …")
+        
     else:
         # Lokal (NumPy) – jak masz teraz
         vecs = load_cached_vectors("indexes", key)
@@ -222,7 +217,8 @@ elif scope == "Alle dokumenter":
         st.caption(f"🧭 Intent (LLM): **{label}** (conf {conf:.2f})")
         where = {"class": {"$in": [label]}} if label != "annet" else {}
 
-        hits = query_topk(coll, spm, k=3, where=where)
+        hits = query_topk(coll, spm, k=8, where=where)
+        hits = prioritize_chunks_by_keywords(spm, hits, topk=3)
         if not hits:
             # robust fallback til hele korpuset
             hits = query_topk(coll, spm, k=3, where={})
@@ -237,34 +233,3 @@ elif scope == "Alle dokumenter":
 # Mangler valg av dokument
 else:
     st.info("Legg inn PDF-er i `data/raw/`, velg ett i venstremenyen og still et spørsmål.")
-#     else:
-#         # --- Embeddings cache pr. fil ---
-#         vecs = load_cached_vectors("indexes", key)
-
-#         if vecs is None:
-#             with st.spinner("Lager embeddings (første gang for dette dokumentet)..."):
-#                 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-#                 vecs = embed_texts(client, chunks)
-#                 save_cached_vectors("indexes", key, vecs)
-#             st.success("Indeksering fullført (cache lagret).")
-
-#         # --- Spørsmål → svar ---
-#         if submit_btn and spm:
-#             with st.spinner("Søker i dokumentet og genererer svar..."):
-#                 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-#                 answer, cites = answer_with_context(client, spm, chunks, vecs, k=3,
-#                 system_prompt=current_sys_prompt  # brukerens/standard prompt
-#                 )
-                
-
-#             st.markdown("### ✅ Svar")
-#             st.write(answer)
-
-#             with st.expander("Vis sitater (med side)"):
-#                 for i, snip in cites:
-#                     page = chunks_meta[i]["page"]
-#                     st.markdown(f"**Chunk {i} – side {page}:**\n\n> {snip} …")
-# else:
-#         st.info("Legg inn PDF-er i `data/raw/`, velg ett i venstremenyen og still et spørsmål.")
-    
-

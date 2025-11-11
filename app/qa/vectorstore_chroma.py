@@ -79,9 +79,6 @@ def query_topk(coll, query: str, k: int = 3, where: Optional[Dict] = None) -> Li
     # Hent nærmeste naboer (k resultater), med eventuelt metadata-filter
     res = coll.query(**query_params)
 
-    # Hent nærmeste naboer (k resultater), med eventuelt metadata-filter
-    # res = coll.query(query_embeddings=[q_emb], n_results=k, where=where or {})
-
     # Pakk ut første spørring (vi sendte inn bare én)
     ids = res.get("ids", [[]])[0]
     docs = res.get("documents", [[]])[0]
