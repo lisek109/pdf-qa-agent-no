@@ -67,9 +67,20 @@ def query_topk(coll, query: str, k: int = 3, where: Optional[Dict] = None) -> Li
     """
     # Embedding av tekstspørringen
     q_emb = _embeddings.embed_query(query)
+    
+    # Bygg parametere til spørringen
+    query_params = {
+        "query_embeddings": [q_emb],
+        "n_results": k
+    }
+    if where:  # legg til filter bare hvis det finnes
+        query_params["where"] = where
 
     # Hent nærmeste naboer (k resultater), med eventuelt metadata-filter
-    res = coll.query(query_embeddings=[q_emb], n_results=k, where=where or {})
+    res = coll.query(**query_params)
+
+    # Hent nærmeste naboer (k resultater), med eventuelt metadata-filter
+    # res = coll.query(query_embeddings=[q_emb], n_results=k, where=where or {})
 
     # Pakk ut første spørring (vi sendte inn bare én)
     ids = res.get("ids", [[]])[0]

@@ -102,7 +102,6 @@ st.sidebar.markdown("### 📄 Velg dokument fra mappen") # Større overskrift
 pdf_files = sorted(glob.glob("data/raw/*.pdf"))
 # Valg av dokument, label_visibility="collapsed" skjuler label- dette for å unngå dobbel label og exepct når listen er tom
 choice = st.sidebar.selectbox("Velg dokument fra mappen", pdf_files, index=0 if pdf_files else None, label_visibility="collapsed")
-# choice = st.sidebar.selectbox("", pdf_files, index=0 if pdf_files else None)
 st.sidebar.caption("Legg PDF-er i data/raw/ og oppdater listen.")
 
 
@@ -112,7 +111,9 @@ with st.form(key="question_form"):
     spm = st.text_area("Spørsmål", placeholder="Skriv et presist spørsmål …", height=140)
     submit_btn = st.form_submit_button("💬 Send")
 
-if choice:
+
+###############  Valg av omfang  ####################
+if scope == "Kun valgt dokument" and choice:
     with st.spinner("Leser og deler opp per side..."):
          pages = extract_pages(choice)
          chunks_meta = split_pages_into_chunks(pages, size=1200, overlap=180, adaptive=adaptive_chunking)
@@ -127,12 +128,14 @@ if choice:
     # Lager en stabil nøkkel for dokumentet (SHA-1 + modellnavn+ chunking)
     key = cache_key_for_file(choice, EMBED_MODEL, adaptive_chunking)
 
-    # metadata til Chroma (doc + page/start/end)
-    metadatas = [{"doc": key, "filename": filename, "page": c["page"], "start": c["start"], "end": c["end"], "class": doc_class} for c in chunks_meta]
-
+    # metadata 
+    metadatas = [{"doc": key, "filename": filename, "page": c["page"], "start": c["start"], "end": c["end"], "class": doc_class}
+                 for c in chunks_meta]
+    
     st.write(f"**Aktivt dokument:** {os.path.basename(choice)}")
     st.write(f"**Antall chunks:** {len(chunks)}")
     
+    # Hvis user velger ChromaDB som retriever
     if retriever_mode == "ChromaDB":
         client_ch = get_client(persist_dir="data/chroma")
         coll = get_collection(client_ch, name="pdf_chunks")
@@ -143,68 +146,125 @@ if choice:
             upsert_chunks(coll, doc_id=key, chunks=chunks, metadatas=metadatas)
             st.success("Indeksering fullført (Chroma).")
             
-        LABELS = ["faktura", "bestilling", "rapport", "annet", "kostnadsoverslag", "kontrakt"]
+        ###################LABELS = ["faktura", "bestilling", "rapport", "annet", "kostnadsoverslag", "kontrakt"]
         
         if submit_btn and spm:
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            
-            where = {}
-            if scope == "Kun valgt dokument":
-                where["doc"] = key
-            else:
-                # ENDRING: LLM-router snevrer søket til klasse
-                label, conf = classify_question_llm(spm, LABELS, threshold=0.55)
-                st.caption(f"🧭 Intent (LLM): **{label}** (conf {conf:.2f})")
-                if label != "annet":
-                    where["class"] = {"$in": [label]}
-           
+            where = {"doc": key}  # NB: alltid kun valgt dokument i denne grenen
             hits = query_topk(coll, spm, k=3, where=where)
-            
-            # Fallback: hvis ingen treff i snevret søk (kun for 'Alle dokumenter')
-            if not hits and scope == "Alle dokumenter":
-                hits = query_topk(coll, spm, k=3, where={})
-            
-            
-            top_chunks = [h[1] for h in hits]  # chunk-tekster fra treffene
-            answer, cites = answer_with_top_chunks(
-                client, spm, top_chunks,
-                system_prompt=current_sys_prompt # NEW: brukerens/standard prompt
-            )
-
-            st.markdown("### ✅ Svar")
-            st.write(answer)
+            if not hits:
+                st.warning("Ingen treff i valgt dokument.")
+            top_chunks = [h[1] for h in hits]
+            answer, cites = answer_with_top_chunks(client, spm, top_chunks, system_prompt=current_sys_prompt)
+            st.markdown("### ✅ Svar"); st.write(answer)
             with st.expander("Vis sitater (med side)"):
                 for i, (hid, text, meta) in enumerate(hits):
-                    st.markdown(f"**Treff {i+1} - side {meta.get('page')}**  \n> {text[:200]} …")
-    
-    else:
-        # --- Embeddings cache pr. fil ---
-        vecs = load_cached_vectors("indexes", key)
+                    st.markdown(f"**Treff {i+1} – side {meta.get('page')}**  \n> {text[:200]} …")
+            # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            
+            # where = {}
+            # if scope == "Kun valgt dokument":
+            #     where["doc"] = key
+            # else:
+            #     # ENDRING: LLM-router snevrer søket til klasse
+            #     label, conf = classify_question_llm(spm, LABELS, threshold=0.55)
+            #     st.caption(f"🧭 Intent (LLM): **{label}** (conf {conf:.2f})")
+            #     if label != "annet":
+            #         where["class"] = {"$in": [label]}
+           
+            # hits = query_topk(coll, spm, k=3, where=where)
+            
+            # # Fallback: hvis ingen treff i snevret søk (kun for 'Alle dokumenter')
+            # if not hits and scope == "Alle dokumenter":
+            #     hits = query_topk(coll, spm, k=3, where={})
+            
+            
+            # top_chunks = [h[1] for h in hits]  # chunk-tekster fra treffene
+            # answer, cites = answer_with_top_chunks(
+            #     client, spm, top_chunks,
+            #     system_prompt=current_sys_prompt # NEW: brukerens/standard prompt
+            # )
 
+            # st.markdown("### ✅ Svar")
+            # st.write(answer)
+            # with st.expander("Vis sitater (med side)"):
+            #     for i, (hid, text, meta) in enumerate(hits):
+            #         st.markdown(f"**Treff {i+1} - side {meta.get('page')}**  \n> {text[:200]} …")
+    else:
+        # Lokal (NumPy) – jak masz teraz
+        vecs = load_cached_vectors("indexes", key)
         if vecs is None:
             with st.spinner("Lager embeddings (første gang for dette dokumentet)..."):
                 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
                 vecs = embed_texts(client, chunks)
                 save_cached_vectors("indexes", key, vecs)
             st.success("Indeksering fullført (cache lagret).")
-
-        # --- Spørsmål → svar ---
         if submit_btn and spm:
-            with st.spinner("Søker i dokumentet og genererer svar..."):
-                client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                answer, cites = answer_with_context(client, spm, chunks, vecs, k=3,
-                system_prompt=current_sys_prompt  # brukerens/standard prompt
-                )
-                
-
-            st.markdown("### ✅ Svar")
-            st.write(answer)
-
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            answer, cites = answer_with_context(client, spm, chunks, vecs, k=3, system_prompt=current_sys_prompt)
+            st.markdown("### ✅ Svar"); st.write(answer)
             with st.expander("Vis sitater (med side)"):
                 for i, snip in cites:
                     page = chunks_meta[i]["page"]
                     st.markdown(f"**Chunk {i} – side {page}:**\n\n> {snip} …")
+                    
+###############  Globalt omfang  ####################
+elif scope == "Alle dokumenter":
+    client_ch = get_client(persist_dir="data/chroma")
+    coll = get_collection(client_ch, name="pdf_chunks")
+    
+    if submit_btn and spm:
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        LABELS = ["faktura","bestilling","rapport","annet","kostnadsoverslag","kontrakt"]
+
+        # ENDRING: LLM som router for hele korpuset
+        label, conf = classify_question_llm(spm, LABELS, threshold=0.55)
+        st.caption(f"🧭 Intent (LLM): **{label}** (conf {conf:.2f})")
+        where = {"class": {"$in": [label]}} if label != "annet" else {}
+
+        hits = query_topk(coll, spm, k=3, where=where)
+        if not hits:
+            # robust fallback til hele korpuset
+            hits = query_topk(coll, spm, k=3, where={})
+
+        top_chunks = [h[1] for h in hits]
+        answer, cites = answer_with_top_chunks(client, spm, top_chunks, system_prompt=current_sys_prompt)
+        st.markdown("### ✅ Svar"); st.write(answer)
+        with st.expander("Vis sitater (fil/side)"):
+            for i, (hid, text, meta) in enumerate(hits):
+                st.markdown(f"**Treff {i+1} – {meta.get('filename','?')} – side {meta.get('page')}**  \n> {text[:200]} …")
+
+# Mangler valg av dokument
 else:
-        st.info("Legg inn PDF-er i `data/raw/`, velg ett i venstremenyen og still et spørsmål.")
+    st.info("Legg inn PDF-er i `data/raw/`, velg ett i venstremenyen og still et spørsmål.")
+#     else:
+#         # --- Embeddings cache pr. fil ---
+#         vecs = load_cached_vectors("indexes", key)
+
+#         if vecs is None:
+#             with st.spinner("Lager embeddings (første gang for dette dokumentet)..."):
+#                 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+#                 vecs = embed_texts(client, chunks)
+#                 save_cached_vectors("indexes", key, vecs)
+#             st.success("Indeksering fullført (cache lagret).")
+
+#         # --- Spørsmål → svar ---
+#         if submit_btn and spm:
+#             with st.spinner("Søker i dokumentet og genererer svar..."):
+#                 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+#                 answer, cites = answer_with_context(client, spm, chunks, vecs, k=3,
+#                 system_prompt=current_sys_prompt  # brukerens/standard prompt
+#                 )
+                
+
+#             st.markdown("### ✅ Svar")
+#             st.write(answer)
+
+#             with st.expander("Vis sitater (med side)"):
+#                 for i, snip in cites:
+#                     page = chunks_meta[i]["page"]
+#                     st.markdown(f"**Chunk {i} – side {page}:**\n\n> {snip} …")
+# else:
+#         st.info("Legg inn PDF-er i `data/raw/`, velg ett i venstremenyen og still et spørsmål.")
     
 
