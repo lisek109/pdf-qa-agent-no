@@ -128,22 +128,6 @@ if uploaded:
     
     # Start appen på nytt for å laste widgeten med den nye nøkkelen/statusen
     st.rerun()
-    
-    
-
-
-# if uploaded:
-#     # Lager path for lagring av filen
-#     pdf_path = os.path.join("data", "raw", uploaded.name)
-#     # Sjekker om filen allerede finnes
-#     if os.path.exists(pdf_path):
-#         st.warning(f"Filen '{uploaded.name}' finnes allerede i mappen. Endre navn og prøv igjen.")
-#     else:
-#         # åpner i binary mode for å unngå encoding-problemer w-write b-binary
-#         with open(pdf_path, "wb") as f:
-#             # skriver buffer direkte til fil
-#             f.write(uploaded.getbuffer())
-#         st.success(f"Lagret: {uploaded.name}")
 
 
 
