@@ -1,4 +1,4 @@
-import os, uuid
+import os
 from pathlib import Path
 import re, glob
 import streamlit as st
@@ -84,37 +84,66 @@ if adaptive_chunking:
         Dette kan forbedre ytelsen for både små og store dokumenter.
         """
     )
-
-# Sørg for at nødvendig mappe finnes
-os.makedirs("data/raw", exist_ok=True) 
-
-# Filopplasting
-uploaded = st.file_uploader("Last opp en PDF-fil", type=["pdf"])
-
+    
+    
+# --- INITIALISERING AV SESSION_STATE ---
+if "active_file" not in st.session_state:
+    st.session_state["active_file"] = None
+    
+if "upload_reset" not in st.session_state:
+    # Denne telleren brukes til å generere en unik 'key' for filopplasteren.
+    # Ved å øke tallet tvinges widgeten til å nullstille seg.
+    st.session_state["upload_reset"] = 0
+    
+# --- WIDGET MED DYNAMISK NØKKEL ---
+uploaded = st.file_uploader(
+    "Last opp en PDF-fil",
+    type=["pdf"],
+    # Nøkkelen er dynamisk, f.eks. "uploader_0", "uploader_1", osv.
+    key=f"uploader_{st.session_state['upload_reset']}",
+)
+    
 if uploaded:
-    # ENDRING: lag en trygg filsti og auto-unik navn ved kollisjon
+    # Definerer basekatalogen og sikrer at den eksisterer
     base_dir = os.path.join("data", "raw")
     os.makedirs(base_dir, exist_ok=True)
+    
+    # Bygger fullstendig filsti
+    pdf_path = os.path.join(base_dir, os.path.basename(uploaded.name))
 
-    # enkel sanitizing + behold originalt navn hvis mulig
-    orig_name = os.path.basename(uploaded.name).replace("\\","_").replace("/","_").strip()
-    if not orig_name.lower().endswith(".pdf"):
-        orig_name += ".pdf"
-
-    pdf_path = os.path.join(base_dir, orig_name)
-
-    # Hvis finnes: legg til kort UUID-suffiks automatisk
     if os.path.exists(pdf_path):
-        stem, ext = os.path.splitext(orig_name)
-        new_name = f"{stem}-{uuid.uuid4().hex[:6]}{ext}"
-        pdf_path = os.path.join(base_dir, new_name)
+        # Hvis filen allerede finnes, bruk eksisterende
+        st.info(f"Bruker eksisterende fil: {uploaded.name}")
+        st.session_state["active_file"] = pdf_path
+    else:
+        # Hvis filen er ny, skriv den til disk
+        with open(pdf_path, "wb") as f:
+            f.write(uploaded.getbuffer())
+        st.success(f"Lagret: {uploaded.name}")
+        st.session_state["active_file"] = pdf_path
+    
+    # NULLSTILLER WIDGETEN FOR FILOPPLASTING:
+    # Øker telleren, noe som endrer 'key' for neste kjøring.
+    st.session_state["upload_reset"] += 1
+    
+    # Start appen på nytt for å laste widgeten med den nye nøkkelen/statusen
+    st.rerun()
+    
+    
 
-    # skriv filen
-    with open(pdf_path, "wb") as f:
-        f.write(uploaded.getbuffer())
 
-    # vis endelig navn (kan være auto-justert)
-    st.success(f"Lagret: {os.path.basename(pdf_path)}")
+# if uploaded:
+#     # Lager path for lagring av filen
+#     pdf_path = os.path.join("data", "raw", uploaded.name)
+#     # Sjekker om filen allerede finnes
+#     if os.path.exists(pdf_path):
+#         st.warning(f"Filen '{uploaded.name}' finnes allerede i mappen. Endre navn og prøv igjen.")
+#     else:
+#         # åpner i binary mode for å unngå encoding-problemer w-write b-binary
+#         with open(pdf_path, "wb") as f:
+#             # skriver buffer direkte til fil
+#             f.write(uploaded.getbuffer())
+#         st.success(f"Lagret: {uploaded.name}")
 
 
 
