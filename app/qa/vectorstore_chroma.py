@@ -1,18 +1,22 @@
 from typing import List, Dict, Optional, Tuple
-from dotenv import load_dotenv
 import os
 import chromadb
 from chromadb.config import Settings
 from langchain_openai import OpenAIEmbeddings
 
-# Laster miljøvariabler fra .env (OpenAI-nøkkel osv.)
-load_dotenv()
+
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 
-# Global embedding-funksjon (OpenAI) – brukes både for dokumenter og spørringer
-_embeddings = OpenAIEmbeddings(model=EMBED_MODEL, api_key=OPENAI_API_KEY)
+
+def make_embeddings(api_key: str) -> OpenAIEmbeddings:
+    """
+    Opretter OpenAIEmbeddings med gitt API-nøkkel.
+    Beholder ikke nøkkelen i global tilstand. 
+    """
+    if not api_key:
+        raise ValueError("Mangler OpenAI API-nøkkel for embeddings.")
+    return OpenAIEmbeddings(model=EMBED_MODEL, api_key=api_key)
 
 def get_client(persist_dir: str = "data/chroma") -> chromadb.Client:
     """
@@ -34,7 +38,7 @@ def get_collection(client: chromadb.Client, name: str = "pdf_chunks"):
         # metadata hnsw:space=cosine -> bruk kosinuslikhet for nærmeste nabo
         return client.create_collection(name=name, metadata={"hnsw:space": "cosine"})
 
-def upsert_chunks(coll, doc_id: str, chunks: List[str], metadatas: Optional[List[Dict]] = None) -> None:
+def upsert_chunks(coll, doc_id: str, chunks: List[str], metadatas: Optional[List[Dict]] = None, api_key: str = "",) -> None:
     """
     Lagrer/oppdaterer (upsert) tekst-chunks i Chroma med tilhørende embeddings.
     - coll: Chroma-samling
@@ -49,7 +53,8 @@ def upsert_chunks(coll, doc_id: str, chunks: List[str], metadatas: Optional[List
     ids = [f"{doc_id}:{i}" for i in range(len(chunks))]
 
     # Regn ut embeddings for alle chunks (batch)
-    embs = _embeddings.embed_documents(chunks)
+    embeddings = make_embeddings(api_key)
+    embs = embeddings.embed_documents(chunks)
 
     # Standardiser metadata-liste; sørg for at 'doc' er satt til doc_id
     metas = metadatas or [{} for _ in chunks]
@@ -59,14 +64,15 @@ def upsert_chunks(coll, doc_id: str, chunks: List[str], metadatas: Optional[List
     # Upsert: opprett eller oppdater poster i samlingen
     coll.upsert(ids=ids, documents=chunks, embeddings=embs, metadatas=metas)
 
-def query_topk(coll, query: str, k: int = 3, where: Optional[Dict] = None) -> List[Tuple[str, str, Dict]]:
+def query_topk(coll, query: str, k: int = 3, where: Optional[Dict] = None,api_key: str = "",) -> List[Tuple[str, str, Dict]]:
     """
     Kjører et vektor-søk (top-k) i Chroma for en gitt tekstspørring.
     - where: valgfritt filter på metadata (f.eks. {"doc": doc_id} eller {"page": 3})
     Returnerer liste av (id, dokumenttekst, metadata) for de beste treffene.
     """
     # Embedding av tekstspørringen
-    q_emb = _embeddings.embed_query(query)
+    embeddings = make_embeddings(api_key)
+    q_emb = embeddings.embed_query(query)
     
     # Bygg parametere til spørringen
     query_params = {

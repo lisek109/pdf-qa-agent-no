@@ -180,7 +180,7 @@ def ingest_to_chroma(pdf_path: str, adaptive_chunking: bool ):
     coll = get_collection(client_ch, name="pdf_chunks")
     exists = coll.get(where={"doc": key}, limit=1)
     if not exists.get("ids"):
-        upsert_chunks(coll, doc_id=key, chunks=chunks, metadatas=metadatas)
+        upsert_chunks(coll, doc_id=key, chunks=chunks, metadatas=metadatas, api_key=st.session_state.get("openai_api_key", ""),)
         print("Indeksering fullført (Chroma).") # for debugging
     return key, filename, chunks, chunks_meta, doc_class, doc_score
 
@@ -308,7 +308,7 @@ if scope == "Kun valgt dokument" and choice:
             client = get_openai_client()
             where = {"doc": key}  # NB: alltid kun valgt dokument i denne grenen
             
-            hits = query_topk(coll, spm, k=8, where=where)
+            hits = query_topk(coll, spm, k=8, where=where, api_key=st.session_state.get("openai_api_key", ""),)
             st.info(f"Hits z query_topk: {len(hits)}") # <-- SPRAWDŹ!
             hits = prioritize_chunks_by_keywords(spm, hits, topk=3)
             st.info(f"Hits po priorytetyzacji: {len(hits)}") # <-- SPRAWDŹ!
@@ -358,7 +358,7 @@ elif scope == "Alle dokumenter":
         st.caption(f"🧭 Intent (LLM): **{label}** (conf {conf:.2f})")
         where = {"class": {"$in": [label]}} if label != "annet" else {}
 
-        hits = query_topk(coll, spm, k=8, where=where)
+        hits = query_topk(coll, spm, k=8, where=where, api_key=st.session_state.get("openai_api_key", ""),)
         print(f"Hits z query_topk (global): {len(hits)}")# <-- SPRAWDŹ!
         print(hits[0])  # for debugging
         hits = prioritize_chunks_by_keywords(spm, hits, topk=3)
@@ -366,7 +366,7 @@ elif scope == "Alle dokumenter":
         print(hits[0])  # for debugging
         if not hits:
             # robust fallback til hele korpuset
-            hits = query_topk(coll, spm, k=3, where={})
+            hits = query_topk(coll, spm, k=3, where={}, api_key=st.session_state.get("openai_api_key", ""),)
 
         top_chunks = [h[1] for h in hits]
         answer, cites = answer_with_top_chunks(client, spm, top_chunks, system_prompt=current_sys_prompt)
