@@ -169,13 +169,16 @@ if uploaded:
         with open(pdf_path, "wb") as f:
             f.write(uploaded.getbuffer())
         st.success(f"Lagret: {uploaded.name}")
+        print(f"Lagret opplastet fil til: {pdf_path}")  # for debugging
         
       # Direkte ingest til Chroma slik at filen er med i 'Alle dokumenter'
     try:
-        key, filename, chunks, chunks_meta, doc_class, doc_score = ingest_to_chroma(pdf_path)
+        key, filename, chunks, chunks_meta, doc_class, doc_score = ingest_to_chroma(pdf_path, adaptive_chunking)
         st.caption(f"📄 Klassifisering: **{doc_class}** (score {doc_score:.2f})")
+        print(f"Klassifisert dokumentet som: {doc_class} (score {doc_score:.2f})")  # for debugging
     except Exception as e:
         st.warning(f"Ingest feilet: {e}")
+        print(f"Ingest feilet: {e}")  # for debugging
     
     # NULLSTILLER WIDGETEN FOR FILOPPLASTING:
     # Øker telleren, noe som endrer 'key' for neste kjøring.
