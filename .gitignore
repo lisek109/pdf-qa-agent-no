@@ -11,3 +11,4 @@ indexes/
 .env
 .env.*
 !.env.example
+models/
