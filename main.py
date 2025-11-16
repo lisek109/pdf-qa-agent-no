@@ -172,7 +172,7 @@ if uploaded:
         
       # Direkte ingest til Chroma slik at filen er med i 'Alle dokumenter'
     try:
-        key, filename, chunks, chunks_meta, doc_class, doc_score = ingest_to_chroma(pdf_path)
+        key, filename, chunks, chunks_meta, doc_class, doc_score = ingest_to_chroma(pdf_path, adaptive_chunking)
         st.caption(f"📄 Klassifisering: **{doc_class}** (score {doc_score:.2f})")
     except Exception as e:
         st.warning(f"Ingest feilet: {e}")
