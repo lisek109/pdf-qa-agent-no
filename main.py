@@ -58,6 +58,43 @@ load_css("assets/styles.css")
 st.title("📄 PDF Assistent ")
 
 
+# --- Sidepanel: OpenAI API-nøkkel ---
+with st.sidebar:
+    st.markdown("### 🔑 OpenAI API key")
+
+    use_user_key = st.checkbox(
+        "Bruk min egen nøkkel",
+        value=True,
+        help="Anbefalt for cluod eller delte miljøer.",
+    )
+
+    api_key = None
+    if use_user_key:
+        api_key = st.text_input(
+            "Din OpenAI API Key",
+            type="password",
+            placeholder="sk-...",
+        )
+    else:
+        # fallback til miljøvariabel
+        api_key = os.getenv("OPENAI_API_KEY", "")
+
+    if not api_key:
+        st.info("Oppgi OpenAI API-nøkkel for å bruke appen.")
+
+# Lagrer nøkkelen i session_state for gjenbruk ikke i disken
+st.session_state["openai_api_key"] = api_key
+
+
+def get_openai_client() -> OpenAI:
+    """Returnerer OpenAI-klient med riktig API-nøkkel."""
+    key = st.session_state.get("openai_api_key") or ""
+    if not key:
+        raise RuntimeError("Mangler OpenAI API-nøkkel. Vennligst oppgi en gyldig nøkkel i sidepanelet.")
+    return OpenAI(api_key=key)
+
+
+
 # --- Toggle: omfang på hovedsiden ---
 global_mode = st.toggle(
     "Alle dokumenter",
@@ -143,7 +180,7 @@ def ingest_to_chroma(pdf_path: str, adaptive_chunking: bool ):
     coll = get_collection(client_ch, name="pdf_chunks")
     exists = coll.get(where={"doc": key}, limit=1)
     if not exists.get("ids"):
-        upsert_chunks(coll, doc_id=key, chunks=chunks, metadatas=metadatas)
+        upsert_chunks(coll, doc_id=key, chunks=chunks, metadatas=metadatas, api_key=st.session_state.get("openai_api_key", ""),)
         print("Indeksering fullført (Chroma).") # for debugging
     return key, filename, chunks, chunks_meta, doc_class, doc_score
 
@@ -268,10 +305,10 @@ if scope == "Kun valgt dokument" and choice:
         coll = get_collection(client_ch, name="pdf_chunks")
         
         if submit_btn and spm:
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            client = get_openai_client()
             where = {"doc": key}  # NB: alltid kun valgt dokument i denne grenen
             
-            hits = query_topk(coll, spm, k=8, where=where)
+            hits = query_topk(coll, spm, k=8, where=where, api_key=st.session_state.get("openai_api_key", ""),)
             st.info(f"Hits z query_topk: {len(hits)}") # <-- SPRAWDŹ!
             hits = prioritize_chunks_by_keywords(spm, hits, topk=3)
             st.info(f"Hits po priorytetyzacji: {len(hits)}") # <-- SPRAWDŹ!
@@ -289,18 +326,17 @@ if scope == "Kun valgt dokument" and choice:
         
     else:
         # Lokal (NumPy) 
+        client = get_openai_client()
         pages = extract_pages(choice)
         chunks_meta = split_pages_into_chunks(pages, size=1200, overlap=180, adaptive=adaptive_chunking)
         chunks = [c["content"] for c in chunks_meta]
         vecs = load_cached_vectors("indexes", key)
         if vecs is None:
             with st.spinner("Lager embeddings (første gang for dette dokumentet)..."):
-                client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
                 vecs = embed_texts(client, chunks)
                 save_cached_vectors("indexes", key, vecs)
             st.success("Indeksering fullført (cache lagret).")
         if submit_btn and spm:
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             answer, cites = answer_with_context(client, spm, chunks, vecs, k=3, system_prompt=current_sys_prompt)
             st.markdown("### ✅ Svar"); st.write(answer)
             with st.expander("Vis sitater (med side)"):
@@ -314,15 +350,15 @@ elif scope == "Alle dokumenter":
     coll = get_collection(client_ch, name="pdf_chunks")
     
     if submit_btn and spm:
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        client = get_openai_client()
         LABELS = ["faktura","bestilling","rapport","annet","kostnadsoverslag","kontrakt"]
 
         # LLM som router for hele korpuset
-        label, conf = classify_question_llm(spm, LABELS, threshold=0.55)
+        label, conf = classify_question_llm(spm, LABELS, threshold=0.55, client=client,)
         st.caption(f"🧭 Intent (LLM): **{label}** (conf {conf:.2f})")
         where = {"class": {"$in": [label]}} if label != "annet" else {}
 
-        hits = query_topk(coll, spm, k=8, where=where)
+        hits = query_topk(coll, spm, k=8, where=where, api_key=st.session_state.get("openai_api_key", ""),)
         print(f"Hits z query_topk (global): {len(hits)}")# <-- SPRAWDŹ!
         print(hits[0])  # for debugging
         hits = prioritize_chunks_by_keywords(spm, hits, topk=3)
@@ -330,7 +366,7 @@ elif scope == "Alle dokumenter":
         print(hits[0])  # for debugging
         if not hits:
             # robust fallback til hele korpuset
-            hits = query_topk(coll, spm, k=3, where={})
+            hits = query_topk(coll, spm, k=3, where={}, api_key=st.session_state.get("openai_api_key", ""),)
 
         top_chunks = [h[1] for h in hits]
         answer, cites = answer_with_top_chunks(client, spm, top_chunks, system_prompt=current_sys_prompt)
