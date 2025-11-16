@@ -354,7 +354,7 @@ elif scope == "Alle dokumenter":
         LABELS = ["faktura","bestilling","rapport","annet","kostnadsoverslag","kontrakt"]
 
         # LLM som router for hele korpuset
-        label, conf = classify_question_llm(spm, LABELS, threshold=0.55)
+        label, conf = classify_question_llm(spm, LABELS, threshold=0.55, client=client,)
         st.caption(f"🧭 Intent (LLM): **{label}** (conf {conf:.2f})")
         where = {"class": {"$in": [label]}} if label != "annet" else {}
 
