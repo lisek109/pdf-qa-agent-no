@@ -11,6 +11,14 @@ from app.qa.vectorstore_chroma import  get_client, get_collection, upsert_chunks
 from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
 from app.classifier.infer import classify_document_ml
 from app.router_llm import classify_question_llm   
+from enum import Enum
+
+class StorageBackend(Enum):
+    LOCAL = "local"
+    CLOUD = "cloud"
+    
+BACKEND_MODE = os.getenv("BACKEND_MODE", "local")
+STORAGE_BACKEND = StorageBackend(BACKEND_MODE)
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
 
@@ -36,6 +44,23 @@ def prioritize_chunks_by_keywords(query: str, hits, topk: int = 3):
         return sum(1 for t in toks if t in tl)
     ranked = sorted(hits, key=lambda h: score(h[1]), reverse=True)
     return ranked[:topk]
+
+
+def get_openai_client() -> OpenAI:
+    """Returnerer OpenAI-klient med riktig API-nøkkel."""
+    key = st.session_state.get("openai_api_key") or ""
+    if not key:
+        raise RuntimeError("Mangler OpenAI API-nøkkel. Vennligst oppgi en gyldig nøkkel i sidepanelet.")
+    return OpenAI(api_key=key)
+
+
+def get_current_user_id() -> str:
+    """
+    Placeholder for user_id
+    """
+    return "demo_user"
+
+user_id = get_current_user_id()
 
 
 # --- INIT av session state ---
@@ -85,13 +110,6 @@ with st.sidebar:
 # Lagrer nøkkelen i session_state for gjenbruk ikke i disken
 st.session_state["openai_api_key"] = api_key
 
-
-def get_openai_client() -> OpenAI:
-    """Returnerer OpenAI-klient med riktig API-nøkkel."""
-    key = st.session_state.get("openai_api_key") or ""
-    if not key:
-        raise RuntimeError("Mangler OpenAI API-nøkkel. Vennligst oppgi en gyldig nøkkel i sidepanelet.")
-    return OpenAI(api_key=key)
 
 
 
@@ -156,13 +174,13 @@ def ingest_to_chroma(pdf_path: str, adaptive_chunking: bool ):
     )
     chunks = [c["content"] for c in chunks_meta]
     st.sidebar.markdown("---") 
-    st.sidebar.info(f"Liczba chunków: {len(chunks)}")
-    st.sidebar.code(f"Pierwszy chunk (preview):\n{chunks[0][:300]}...")
+    st.sidebar.info(f"Antall chunks: {len(chunks)}")
+    st.sidebar.code(f"Første chunk (preview):\n{chunks[0][:300]}...")
     st.sidebar.markdown("---")
     print(f"Delte dokumentet i {len(chunks)} chunks.")  # for debugging
     print(f"Første chunk preview: {chunks[0][:200]}...")  # for debugging
 
-    # Klassifiser hele dokumentet (DIN modell)
+    # Klassifiser hele dokumentet (MIN modell)
     doc_preview = " ".join(chunks)[:8000]
     doc_class, doc_score = classify_document_ml(doc_preview)
 
@@ -171,7 +189,7 @@ def ingest_to_chroma(pdf_path: str, adaptive_chunking: bool ):
     print(f"Stabil nøkkel for dokumentet: {key} i ingest_to_chroma")  # for debugging
     filename = os.path.basename(pdf_path)
     metadatas = [
-        {"doc": key, "filename": filename, "page": c["page"], "start": c["start"], "end": c["end"], "class": doc_class}
+        {"user_id": user_id, "doc": key, "filename": filename, "page": c["page"], "start": c["start"], "end": c["end"], "class": doc_class}
         for c in chunks_meta
     ]
 
@@ -306,7 +324,7 @@ if scope == "Kun valgt dokument" and choice:
         
         if submit_btn and spm:
             client = get_openai_client()
-            where = {"doc": key}  # NB: alltid kun valgt dokument i denne grenen
+            where = {"doc": key, "user_id": user_id}  # NB: alltid kun valgt dokument i denne grenen
             
             hits = query_topk(coll, spm, k=8, where=where, api_key=st.session_state.get("openai_api_key", ""),)
             st.info(f"Hits z query_topk: {len(hits)}") # <-- SPRAWDŹ!
@@ -326,6 +344,9 @@ if scope == "Kun valgt dokument" and choice:
         
     else:
         # Lokal (NumPy) 
+        # Merk: kunne optimalisert ved å cache både chunks og metadata sammen med vektorene,
+        # slik at vi slipper å kjøre extract_pages og split_pages_into_chunks hver gang.
+
         client = get_openai_client()
         pages = extract_pages(choice)
         chunks_meta = split_pages_into_chunks(pages, size=1200, overlap=180, adaptive=adaptive_chunking)
@@ -356,7 +377,7 @@ elif scope == "Alle dokumenter":
         # LLM som router for hele korpuset
         label, conf = classify_question_llm(spm, LABELS, threshold=0.55, client=client,)
         st.caption(f"🧭 Intent (LLM): **{label}** (conf {conf:.2f})")
-        where = {"class": {"$in": [label]}} if label != "annet" else {}
+        where = {"class": {"$in": [label]}, "user_id": user_id} if label != "annet" else {}
 
         hits = query_topk(coll, spm, k=8, where=where, api_key=st.session_state.get("openai_api_key", ""),)
         print(f"Hits z query_topk (global): {len(hits)}")# <-- SPRAWDŹ!
@@ -366,7 +387,7 @@ elif scope == "Alle dokumenter":
         print(hits[0])  # for debugging
         if not hits:
             # robust fallback til hele korpuset
-            hits = query_topk(coll, spm, k=3, where={}, api_key=st.session_state.get("openai_api_key", ""),)
+            hits = query_topk(coll, spm, k=3, where={"user_id": user_id}, api_key=st.session_state.get("openai_api_key", ""),)
 
         top_chunks = [h[1] for h in hits]
         answer, cites = answer_with_top_chunks(client, spm, top_chunks, system_prompt=current_sys_prompt)
