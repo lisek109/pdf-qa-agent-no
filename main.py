@@ -250,54 +250,102 @@ file_query = st.sidebar.text_input("🔎 Søk i filnavn", key="file_query", plac
 st.sidebar.markdown("<br><br>", unsafe_allow_html=True) # Legger til litt luft 
 st.sidebar.markdown("### 📄 Velg dokument fra mappen") # Større overskrift
 
-all_pdfs = sorted(glob.glob("data/raw/**/*.pdf", recursive=True))
-all_pdfs = [p.replace("\\", "/") for p in all_pdfs]
 
-if file_query:
-    q = file_query.lower()
-    # Filtrer PDF-liste basert på søkestrengen
-    pdf_list_paths = [p for p in all_pdfs if os.path.basename(p).lower().find(q) != -1]
+if STORAGE_BACKEND is StorageBackend.LOCAL:
+    all_pdfs = sorted(glob.glob("data/raw/**/*.pdf", recursive=True))
+    all_pdfs = [p.replace("\\", "/") for p in all_pdfs]
+
+    if file_query:
+        q = file_query.lower()
+        # Filtrer PDF-liste basert på søkestrengen
+        pdf_list_paths = [p for p in all_pdfs if os.path.basename(p).lower().find(q) != -1]
+    else:
+        pdf_list_paths = all_pdfs
+        
+    # Gjør om til bare filnavn for visning i selectbox
+    pdf_list_names = [os.path.basename(p) for p in pdf_list_paths]
+
+    # Hvis listen ikke er tom, prøv å finne indeksen til den aktive filen
+    if st.session_state.get("active_file") and st.session_state["active_file"] in pdf_list_paths:
+        # Finn index til filen fra st.session_state["active_file"]
+        default_index = pdf_list_names.index(os.path.basename(st.session_state["active_file"]))
+    else:
+        default_index = 0 if pdf_list_names else None
+
+    choice_name = st.sidebar.selectbox(
+        "Velg dokument fra mappen", 
+        options=pdf_list_names, 
+        index=default_index,
+        # Skjuler label for å unngå dobbel label og expect når listen er tom
+        label_visibility="collapsed", 
+        key="selectbox_choice_name" # Ny nøkkel for selectbox for å unngå caching-problemer
+    )
+
+    # Endelig synkronsiering:
+    # Mappe valgt navn tilbake til full sti og lagre i session_state
+    if choice_name and choice_name != st.session_state.get("last_choice_name"):
+        # Finn full sti basert på valgt navn
+        selected_full_path = next((p for p in pdf_list_paths if os.path.basename(p) == choice_name), None)
+        print(selected_full_path)  # for debugging
+        
+        if selected_full_path:
+            st.session_state["active_file"] = selected_full_path
+        
+        # Lagre det siste valgte navnet for å unngå unødvendige oppdateringer
+        st.session_state["last_choice_name"] = choice_name
+
+    choice = st.session_state.get("active_file")
+    print("Valgt dokument:", choice)  # for debugging
+    st.sidebar.caption("Legg PDF-er i data/raw/ og oppdater listen.")
+    
 else:
-    pdf_list_paths = all_pdfs
-    
-# Gjør om til bare filnavn for visning i selectbox
-pdf_list_names = [os.path.basename(p) for p in pdf_list_paths]
+        # --- Sky-modus: hent dokumentliste fra cloud storage (Blob + Cosmos) ---
+    from app.cloud_storage import list_bruker_dokumenter  # denne lager vi senere
 
-# --- Widget SelectBox ---
+    dokumenter = list_bruker_dokumenter(bruker_id)  # f.eks. [{"id": "...", "navn": "..."}]
 
-# Hvis listen ikke er tom, prøv å finne indeksen til den aktive filen
-if st.session_state.get("active_file") and st.session_state["active_file"] in pdf_list_paths:
-    # Finn index til filen fra st.session_state["active_file"]
-    default_index = pdf_list_names.index(os.path.basename(st.session_state["active_file"]))
-else:
-    default_index = 0 if pdf_list_names else None
+    if file_query:
+        q = file_query.lower()
+        dokumenter = [
+            d for d in dokumenter if q in d["navn"].lower()
+        ]
 
-choice_name = st.sidebar.selectbox(
-    "Velg dokument fra mappen", 
-    options=pdf_list_names, 
-    index=default_index,
-    # Skjuler label for å unngå dobbel label og expect når listen er tom
-    label_visibility="collapsed", 
-    key="selectbox_choice_name" # Ny nøkkel for selectbox for å unngå caching-problemer
-)
+    navn_liste = [d["navn"] for d in dokumenter]
 
-# Endelig synkronsiering:
-# Mappe valgt navn tilbake til full sti og lagre i session_state
-if choice_name and choice_name != st.session_state.get("last_choice_name"):
-    # Finn full sti basert på valgt navn
-    selected_full_path = next((p for p in pdf_list_paths if os.path.basename(p) == choice_name), None)
-    print(selected_full_path)  # for debugging
-    
-    if selected_full_path:
-        st.session_state["active_file"] = selected_full_path
-    
-    # Lagre det siste valgte navnet for å unngå unødvendige oppdateringer
-    st.session_state["last_choice_name"] = choice_name
+    if st.session_state.get("active_file"):
+        # Finne standardvalg basert på forrige dokument-ID
+        aktiv_id = st.session_state["active_file"]
+        aktiv_dok = next((d for d in dokumenter if d["id"] == aktiv_id), None)
+        if aktiv_dok:
+            try:
+                default_index = navn_liste.index(aktiv_dok["navn"])
+            except ValueError:
+                default_index = 0 if navn_liste else None
+        else:
+            default_index = 0 if navn_liste else None
+    else:
+        default_index = 0 if navn_liste else None
 
-choice = st.session_state.get("active_file")
+    choice_name = st.sidebar.selectbox(
+        "Velg dokument",
+        options=navn_liste,
+        index=default_index,
+        label_visibility="collapsed",
+        key="selectbox_choice_name",
+    )
+
+    if choice_name and choice_name != st.session_state.get("last_choice_name"):
+        valgt = next((d for d in dokumenter if d["navn"] == choice_name), None)
+        if valgt:
+            # I sky-modus lagrer vi dokument-ID, ikke filsti
+            st.session_state["active_file"] = valgt["id"]
+
+        st.session_state["last_choice_name"] = choice_name
+
+    choice = st.session_state.get("active_file")
+    st.sidebar.caption("Du ser kun dokumentene som tilhører din bruker.")
+
 print("Valgt dokument:", choice)  # for debugging
-st.sidebar.caption("Legg PDF-er i data/raw/ og oppdater listen.")
-    
 
 
 ###############  Spørsmål  ####################
