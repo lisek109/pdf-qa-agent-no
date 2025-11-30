@@ -24,7 +24,7 @@ class DokumentInfo:
     dokumentklasse: Optional[str] = None
 
 
-@dataclass
+
 class ChunkTreff:
     """
     Representerer ett treff fra et semantisk søk i tekst-chunks.
@@ -41,7 +41,7 @@ class ChunkTreff:
     dokumentklasse: Optional[str] = None
 
 
-@dataclass
+
 def lagre_pdf(bruker_id: str, filnavn: str, data: bytes) -> str:
     """
     Lagre en PDF for en gitt bruker og returner et dokument-ID.
