@@ -12,8 +12,8 @@ from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
 from app.classifier.infer import classify_document_ml
 from app.router_llm import classify_question_llm   
 from enum import Enum
-from app.cloud_storage import list_bruker_dokumenter
-from app.cloud_storage import sporr_chunks
+from app.cloud_storage import list_bruker_dokumenter, sporr_chunks, lagre_pdf
+
 
 class StorageBackend(Enum):
     LOCAL = "local"
@@ -53,6 +53,7 @@ def prioritize_chunks_by_keywords(query: str, hits, topk: int = 3):
         return sum(1 for t in toks if t in tl)
     ranked = sorted(hits, key=lambda h: score(h[1]), reverse=True)
     return ranked[:topk]
+
 
 
 def get_openai_client() -> OpenAI:
@@ -411,7 +412,7 @@ if scope == "Kun valgt dokument" and choice:
             
             if submit_btn and spm:
                 client = get_openai_client()
-                where = {"doc": key, "user_id": user_id}  # NB: alltid kun valgt dokument i denne grenen
+                where = {"doc": key}  # NB: alltid kun valgt dokument i denne grenen
                 
                 hits = query_topk(coll, spm, k=8, where=where, api_key=st.session_state.get("openai_api_key", ""),)
                 st.info(f"Hits z query_topk: {len(hits)}") # <-- SPRAWDŹ!
