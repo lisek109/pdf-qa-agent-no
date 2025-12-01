@@ -58,7 +58,7 @@ def prioritize_chunks_by_keywords(query: str, hits, topk: int = 3):
 
 def get_openai_client() -> OpenAI:
     """Returnerer OpenAI-klient med riktig API-nøkkel."""
-    key = st.session_state.get("openai_api_key") or ""
+    key = st.session_state.get("openai_api_key") or os.getenv("OPENAI_API_KEY")
     if not key:
         raise RuntimeError("Mangler OpenAI API-nøkkel. Vennligst oppgi en gyldig nøkkel i sidepanelet.")
     return OpenAI(api_key=key)
@@ -415,9 +415,6 @@ if scope == "Kun valgt dokument" and choice:
                 where = {"doc": key}  # NB: alltid kun valgt dokument i denne grenen
                 
                 hits = query_topk(coll, spm, k=8, where=where, api_key=st.session_state.get("openai_api_key", ""),)
-                st.info(f"Hits z query_topk: {len(hits)}") # <-- SPRAWDŹ!
-                hits = prioritize_chunks_by_keywords(spm, hits, topk=3)
-                st.info(f"Hits po priorytetyzacji: {len(hits)}") # <-- SPRAWDŹ!
                 
                 if not hits:
                     st.warning("Ingen treff i valgt dokument.")
@@ -512,11 +509,8 @@ elif scope == "Alle dokumenter":
             where = {"class": {"$in": [label]}, "user_id": user_id} if label != "annet" else {}
 
             hits = query_topk(coll, spm, k=8, where=where, api_key=st.session_state.get("openai_api_key", ""),)
-            print(f"Hits z query_topk (global): {len(hits)}")# <-- SPRAWDŹ!
-            print(hits[0])  # for debugging
             hits = prioritize_chunks_by_keywords(spm, hits, topk=3)
-            print(f"Hits po priorytetyzacji (global): {len(hits)}")# <-- SPRAWDŹ!
-            print(hits[0])  # for debugging
+            
             if not hits:
                 # robust fallback til hele korpuset
                 hits = query_topk(coll, spm, k=3, where={"user_id": user_id}, api_key=st.session_state.get("openai_api_key", ""),)

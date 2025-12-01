@@ -24,6 +24,9 @@ WORKDIR /app
 # Kopier requirements først for bedre caching
 COPY requirements.txt /app/
 
+
+RUN pip uninstall -y httpx httpcore || true
+
 # Installer Python-avhengigheter
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
@@ -47,4 +50,4 @@ ENV BACKEND_MODE=local
 EXPOSE 8501
 
 # Start kommando – kjør Streamlit-appen
-CMD ["streamlit", "run", "app/main.py"]
+CMD ["streamlit", "run", "main.py"]
