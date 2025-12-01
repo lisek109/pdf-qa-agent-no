@@ -1,21 +1,23 @@
 # infra/main.tf
 
 
-# module "storage" {
-#   source = "./modules/storage"
+module "storage" {
+  source = "./modules/storage"
 
-#   resource_group_name  = module.resource_group.name
-#   location             = var.location
-#   storage_account_name = var.storage_account_name
-# }
+  resource_group_name  = module.container_app.resource_group_name
+  location             = var.location
+  storage_account_name = var.storage_account_name
+  tags                 = local.common_tags
+}
 
-# module "cosmos" {
-#   source = "./modules/cosmos"
+module "cosmos" {
+  source = "./modules/cosmos"
 
-#   resource_group_name = module.resource_group.name
-#   location            = var.location
-#   account_name        = var.cosmos_account_name
-# }
+  resource_group_name = module.container_app.resource_group_name
+  location            = var.location
+  cosmos_account_name = var.cosmos_account_name
+  tags                = local.common_tags
+}
 
 module "container_app" {
   source             = "./modules/container_app"
