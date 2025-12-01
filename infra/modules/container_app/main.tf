@@ -37,9 +37,42 @@ resource "azurerm_container_app" "app" {
       cpu    = 0.5
       memory = "1Gi"
 
+      # --- Backend-modus: lokal eller sky ---
       env {
         name  = "BACKEND_MODE"
-        value = "local" # senere: "cloud"
+        value = "local" # senere: "cloud" når cloud_storage er ferdig
+      }
+
+      # --- Blob Storage connection string ---
+      env {
+        name = "BLOB_CONNECTION_STRING"
+        # Verdien kommer fra storage-modulen (primary_connection_string)
+        value = var.blob_connection_string
+      }
+
+      # --- Cosmos DB-tilkobling ---
+      env {
+        name = "COSMOS_ENDPOINT"
+        # Basis-URL til Cosmos-kontoen 
+        value = var.cosmos_endpoint
+      }
+
+      env {
+        name = "COSMOS_KEY"
+        # Primærnøkkel for Cosmos DB (brukes for å autentisere fra Python)
+        value = var.cosmos_key
+      }
+
+      env {
+        name = "COSMOS_DB"
+        # Navn på databasen der vi lagrer dokumenter/chunks (f.eks. 'pdfdb')
+        value = var.cosmos_db_name
+      }
+
+      env {
+        name = "COSMOS_CONTAINER"
+        # Navn på containeren som inneholder chunks med embeddings fe  'chunks'
+        value = var.cosmos_container_name
       }
     }
 
