@@ -16,3 +16,7 @@ joblib==1.5.2
 threadpoolctl==3.6.0
 pandas>=2.2
 Faker
+
+#Azure
+azure-storage-blob
+azure-cosmos
