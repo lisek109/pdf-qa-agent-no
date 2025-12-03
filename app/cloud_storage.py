@@ -26,8 +26,10 @@ import uuid
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Any
 
-from azure.storage.blob import BlobServiceClient
-from azure.cosmos import CosmosClient, PartitionKey
+import numpy as np
+from azure.storage.blob import BlobServiceClient, ContainerClient
+from azure.cosmos import CosmosClient, PartitionKey, exceptions as cosmos_exceptions
+# ContainerProxy finnes ikke i alle versjoner av azure-cosmos; bruk Any for typing
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +96,7 @@ def _has_cosmos_config() -> bool:
 
 # -------------------- Klient-initialisering (lazy) --------------------
 
-_blob_container_client: Optional[Any] = None
+_blob_container_client: Optional[ContainerClient] = None
 _cosmos_container_client: Optional[Any] = None
 
 

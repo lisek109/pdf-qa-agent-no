@@ -1,12 +1,13 @@
 import os
 from pathlib import Path
 import re, glob
+import numpy as np
 import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
 from app.parsers.pdf import extract_pages
 from app.qa.chunking import split_pages_into_chunks
-from app.qa.retrieval import embed_texts, answer_with_context, load_cached_vectors, save_cached_vectors, answer_with_top_chunks, cache_key_for_file
+from app.qa.retrieval import embed_texts, answer_with_context, load_cached_vectors, save_cached_vectors, answer_with_top_chunks, cache_key_for_file, file_sha1
 from app.qa.vectorstore_chroma import  get_client, get_collection, upsert_chunks, query_topk
 from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
 from app.classifier.infer import classify_document_ml
@@ -176,8 +177,14 @@ uploaded = st.file_uploader(
 
 
 # --- Funksjon: ingest til Chroma umiddelbart etter opplasting ---
-def ingest_to_chroma(pdf_path: str, adaptive_chunking: bool ):
-    """ENDRING: full ingest – les, chunk, klassifiser, upsert til Chroma."""
+def ingest_to_chroma(pdf_path: str, adaptive_chunking: bool, force_reindex: bool = False):
+    """ENDRING: full ingest – les, chunk, klassifiser, upsert til Chroma.
+
+    Args:
+        pdf_path: path to PDF on disk
+        adaptive_chunking: whether to use adaptive chunk sizes
+        force_reindex: if True, upsert to Chroma even if doc key already exists
+    """
     pages = extract_pages(pdf_path)
     chunks_meta = split_pages_into_chunks(
         pages, size=1200, overlap=180, adaptive=adaptive_chunking
@@ -199,7 +206,17 @@ def ingest_to_chroma(pdf_path: str, adaptive_chunking: bool ):
     print(f"Stabil nøkkel for dokumentet: {key} i ingest_to_chroma")  # for debugging
     filename = os.path.basename(pdf_path)
     metadatas = [
-        {"user_id": user_id, "doc": key, "filename": filename, "page": c["page"], "start": c["start"], "end": c["end"], "class": doc_class}
+        {
+            "user_id": user_id,
+            "doc": key,
+            "filename": filename,
+            "page": c["page"],
+            "start": c["start"],
+            "end": c["end"],
+            "class": doc_class,
+            "mode": "adaptive" if adaptive_chunking else "static",
+            "chunk_length": len(c["content"]),
+        }
         for c in chunks_meta
     ]
 
@@ -207,7 +224,7 @@ def ingest_to_chroma(pdf_path: str, adaptive_chunking: bool ):
     client_ch = get_client(persist_dir="data/chroma")
     coll = get_collection(client_ch, name="pdf_chunks")
     exists = coll.get(where={"doc": key}, limit=1)
-    if not exists.get("ids"):
+    if force_reindex or not exists.get("ids"):
         upsert_chunks(coll, doc_id=key, chunks=chunks, metadatas=metadatas, api_key=st.session_state.get("openai_api_key", ""),)
         print("Indeksering fullført (Chroma).") # for debugging
     return key, filename, chunks, chunks_meta, doc_class, doc_score
@@ -404,6 +421,19 @@ if scope == "Kun valgt dokument" and choice:
         print(f"Stabil nøkkel for dokumentet: {key} i Kun valgt dokument")  # for debugging
         
         st.write(f"**Aktivt dokument:** {filename}")
+
+        # Reindekserings-knapp: lar bruker gjenskape chunk/embeddings i valgt modus
+        if st.button("🔁 Reindekseruj med nåværende chunking"):
+            with st.spinner("Reindekserer dokumentet med valgt chunking..."):
+                try:
+                    key2, filename2, chunks2, chunks_meta2, doc_class2, doc_score2 = ingest_to_chroma(choice, adaptive_chunking, force_reindex=True)
+                    st.success("Reindeksering fullført.")
+                    st.session_state["last_reindexed"] = key2
+                    # Oppdater lokal nøkkel og rerstarter for å laste ny cache/tilstand
+                    key = key2
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Reindeksering feilet: {e}")
         
         # Hvis user velger ChromaDB som retriever
         if retriever_mode == "ChromaDB":
@@ -415,10 +445,19 @@ if scope == "Kun valgt dokument" and choice:
                 where = {"doc": key}  # NB: alltid kun valgt dokument i denne grenen
                 
                 hits = query_topk(coll, spm, k=8, where=where, api_key=st.session_state.get("openai_api_key", ""),)
-                
+
                 if not hits:
-                    st.warning("Ingen treff i valgt dokument.")
-                    top_chunks = []
+                    # Fallback: kanskje dokument er indeksert med annen chunking (adaptive/static)
+                    # Prøv å finne treff basert på filename (uavhengig av doc-key)
+                    fallback_where = {"filename": filename}
+                    fallback_hits = query_topk(coll, spm, k=8, where=fallback_where, api_key=st.session_state.get("openai_api_key", ""),)
+                    if fallback_hits:
+                        st.info("Fant treff via filename-fallback — mulig annen chunking brukt ved indeksering.")
+                        hits = fallback_hits
+                        top_chunks = [h[1] for h in hits]
+                    else:
+                        st.warning("Ingen treff i valgt dokument.")
+                        top_chunks = []
                 else:
                     top_chunks = [h[1] for h in hits]
                 answer, cites = answer_with_top_chunks(client, spm, top_chunks, system_prompt=current_sys_prompt)
@@ -438,10 +477,24 @@ if scope == "Kun valgt dokument" and choice:
             chunks = [c["content"] for c in chunks_meta]
             vecs = load_cached_vectors("indexes", key)
             if vecs is None:
-                with st.spinner("Lager embeddings (første gang for dette dokumentet)..."):
-                    vecs = embed_texts(client, chunks)
-                    save_cached_vectors("indexes", key, vecs)
-                st.success("Indeksering fullført (cache lagret).")
+                # Fallback: hvis dokumentet tidligere ble indeksert med annen chunking (adaptive/static),
+                # prøv å finne en eksisterende cachefil basert på filens SHA1 uavhengig av chunking-flag.
+                sha = file_sha1(choice)
+                pattern = os.path.join("indexes", f"{sha}__{EMBED_MODEL}_*.npy")
+                matches = glob.glob(pattern)
+                if matches:
+                    vec_path = matches[0]
+                    try:
+                        vecs = np.load(vec_path)
+                        st.info(f"Bruker eksisterende vektor-cache ({os.path.basename(vec_path)}) som fallback — mulig annen chunking enn valgt.")
+                    except Exception:
+                        vecs = None
+
+                if vecs is None:
+                    with st.spinner("Lager embeddings (første gang for dette dokumentet)..."):
+                        vecs = embed_texts(client, chunks)
+                        save_cached_vectors("indexes", key, vecs)
+                    st.success("Indeksering fullført (cache lagret).")
             if submit_btn and spm:
                 answer, cites = answer_with_context(client, spm, chunks, vecs, k=3, system_prompt=current_sys_prompt)
                 st.markdown("### ✅ Svar"); st.write(answer)
@@ -526,7 +579,7 @@ elif scope == "Alle dokumenter":
         if submit_btn and spm:
             try:
                 treff = sporr_chunks(
-                    bruker_id=bruker_id,
+                    bruker_id=user_id,
                     sporsmal=spm,
                     top_k=5,
                     dokument_id=None,  # alle dokumenter for brukeren
