@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import re, glob
 import numpy as np
+import tempfile
 import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -11,10 +12,9 @@ from app.qa.retrieval import embed_texts, answer_with_context, load_cached_vecto
 from app.qa.vectorstore_chroma import  get_client, get_collection, upsert_chunks, query_topk
 from app.qa.ingest import ingest_to_chroma
 from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
-from app.classifier.infer import classify_document_ml
 from app.router_llm import classify_question_llm   
 from enum import Enum
-from app.cloud_storage import list_bruker_dokumenter, sporr_chunks, lagre_pdf
+from app.cloud_storage import list_bruker_dokumenter, sporr_chunks, lagre_pdf, lagre_chunks
 from app.qa.qa_utils import embed_sporsmal
 
 
@@ -206,24 +206,77 @@ if uploaded:
         
         # Start appen på nytt for å laste widgeten med den nye nøkkelen/statusen
         st.rerun()
-    else:   
-                # ---- SKY-MODUS: lagre PDF i cloud storage (Blob/Cosmos) ----
-        data = uploaded.getvalue()
-        try:
-            dokument_id = lagre_pdf(user_id, uploaded.name, data)
-            # TODO: Når Azure-backend er på plass:
-            #  - les sider / chunks
-            #  - beregn embeddings
-            #  - kall lagre_chunks(bruker_id, dokument_id, chunks_med_embeddings)
-            st.success(f"PDF lagret i sky for bruker {user_id}.")
-            st.session_state["active_file"] = dokument_id
-        except NotImplementedError:
-            st.error("Cloud-lagring (lagre_pdf) er ikke implementert ennå.")
-        except Exception as e:
-            st.error(f"Uventet feil ved cloud-opplasting: {e}")
+    else:
+    # ---- SKY-MODUS: lagre PDF i cloud storage (Blob/Cosmos) ----
+    data = uploaded.getvalue()
 
-        st.session_state["upload_reset"] += 1
-        st.rerun()
+    # OpenAI-klient trengs for embeddings
+    client = get_openai_client()
+
+    try:
+        # 1) Lagre selve PDF-filen i Blob Storage + metadata i Cosmos
+        dokument_id = lagre_pdf(user_id, uploaded.name, data)
+
+        # 2) Ekstraher tekst og lag chunks lokalt (fra den opplastede bytestreamen)
+        #    Vi skriver til en midlertidig fil fordi extract_pages forventer en filsti.
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+
+        try:
+            # Leser sider fra midlertidig PDF
+            pages = extract_pages(tmp_path)
+            # Lager chunks (samme logikk som i lokal-modus)
+            chunks_meta = split_pages_into_chunks(
+                pages,
+                size=1200,
+                overlap=180,
+                adaptive=adaptive_chunking,
+            )
+            chunks = [c["content"] for c in chunks_meta]
+
+            # 3) Beregn embeddings for alle chunks
+            vecs = embed_texts(client, chunks)
+
+            # 4) Bygg struktur for lagre_chunks (en dict per chunk)
+            chunks_med_embeddings = []
+            for i, (chunk, meta, emb) in enumerate(zip(chunks, chunks_meta, vecs)):
+                chunks_med_embeddings.append(
+                    {
+                        "chunk_index": i,
+                        "tekst": chunk,
+                        "page": meta.get("page"),
+                        "embedding": emb,
+                        "dokumentklasse": None,  # ev. senere: klassifisering per dokument
+                        "filnavn": uploaded.name,
+                    }
+                )
+
+            # 5) Lagre chunks + embeddings i Cosmos DB
+            lagre_chunks(
+                bruker_id=user_id,
+                dokument_id=dokument_id,
+                chunks_med_embeddings=chunks_med_embeddings,
+            )
+
+            st.success(f"PDF og chunks lagret i sky for bruker {user_id}.")
+        finally:
+            # Forsøk å rydde opp den midlertidige filen
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+        # I sky-modus bruker vi dokument-ID som "active_file"
+        st.session_state["active_file"] = dokument_id
+
+    except NotImplementedError:
+        st.error("Cloud-lagring (lagre_pdf / lagre_chunks) er ikke implementert ennå.")
+    except Exception as e:
+        st.error(f"Uventet feil ved cloud-opplasting: {e}")
+
+    st.session_state["upload_reset"] += 1
+    st.rerun()
         
         
     
@@ -445,9 +498,6 @@ if scope == "Kun valgt dokument" and choice:
     else:
                 # ---- SKY-MODUS: choice er dokument-ID, ikke filsti ----
         st.write("**Aktivt dokument (sky):**", choice)
-
-        if retriever_mode != "ChromaDB":
-            st.info("I sky-modus brukes kun vektor-søk i cloud-backend (Chroma/NumPy er lokal).")
 
         if submit_btn and spm:
             from app.cloud_storage import sporr_chunks
