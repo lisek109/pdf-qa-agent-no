@@ -7,13 +7,15 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from app.parsers.pdf import extract_pages
 from app.qa.chunking import split_pages_into_chunks
-from app.qa.retrieval import embed_texts, answer_with_context, load_cached_vectors, save_cached_vectors, answer_with_top_chunks, cache_key_for_file, file_sha1
+from app.qa.retrieval import embed_texts, answer_with_context, load_cached_vectors, save_cached_vectors, answer_with_top_chunks, cache_key_for_file, file_sha1, prioritize_chunks_by_keywords
 from app.qa.vectorstore_chroma import  get_client, get_collection, upsert_chunks, query_topk
+from app.qa.ingest import ingest_to_chroma
 from app.qa.prompts import DEFAULT_SYSTEM_PROMPT
 from app.classifier.infer import classify_document_ml
 from app.router_llm import classify_question_llm   
 from enum import Enum
 from app.cloud_storage import list_bruker_dokumenter, sporr_chunks, lagre_pdf
+from app.qa.qa_utils import embed_sporsmal
 
 
 class StorageBackend(Enum):
@@ -45,17 +47,6 @@ def load_css(path: str) -> None:
         st.debug("styles.css ikke funnet - fortsetter uten egen CSS.")  # trygg logg-linje
         
         
-# Funksjon for å prioritere chunks basert på nøkkelord
-def prioritize_chunks_by_keywords(query: str, hits, topk: int = 3):
-    # hits: liste av (id, text, meta)
-    toks = [t for t in re.split(r"[\W_]+", query.lower()) if len(t) > 2]
-    def score(text: str) -> int:
-        tl = text.lower()
-        return sum(1 for t in toks if t in tl)
-    ranked = sorted(hits, key=lambda h: score(h[1]), reverse=True)
-    return ranked[:topk]
-
-
 
 def get_openai_client() -> OpenAI:
     """Returnerer OpenAI-klient med riktig API-nøkkel."""
@@ -91,7 +82,7 @@ st.set_page_config(page_title="PDF-spørsmål (NO)", page_icon="📄", layout="w
 # Laster CSS for tilpasset styling
 load_css("assets/styles.css")
 # Tittel
-st.title("📄 PDF Assistent ")
+st.title("📄 PDF Assistent - husk å fjerne Bruk min egen nøkkel!!!!!!!!!!!!!!!!")
 
 
 # --- Sidepanel: OpenAI API-nøkkel ---
@@ -176,62 +167,6 @@ uploaded = st.file_uploader(
 
 
 
-# --- Funksjon: ingest til Chroma umiddelbart etter opplasting ---
-def ingest_to_chroma(pdf_path: str, adaptive_chunking: bool, force_reindex: bool = False):
-    """ENDRING: full ingest – les, chunk, klassifiser, upsert til Chroma.
-
-    Args:
-        pdf_path: path to PDF on disk
-        adaptive_chunking: whether to use adaptive chunk sizes
-        force_reindex: if True, upsert to Chroma even if doc key already exists
-    """
-    pages = extract_pages(pdf_path)
-    chunks_meta = split_pages_into_chunks(
-        pages, size=1200, overlap=180, adaptive=adaptive_chunking
-    )
-    chunks = [c["content"] for c in chunks_meta]
-    st.sidebar.markdown("---") 
-    st.sidebar.info(f"Antall chunks: {len(chunks)}")
-    st.sidebar.code(f"Første chunk (preview):\n{chunks[0][:300]}...")
-    st.sidebar.markdown("---")
-    print(f"Delte dokumentet i {len(chunks)} chunks.")  # for debugging
-    print(f"Første chunk preview: {chunks[0][:200]}...")  # for debugging
-
-    # Klassifiser hele dokumentet (MIN modell)
-    doc_preview = " ".join(chunks)[:8000]
-    doc_class, doc_score = classify_document_ml(doc_preview)
-
-    # Nøkkel + metadata
-    key = cache_key_for_file(pdf_path, EMBED_MODEL, adaptive_chunking)
-    print(f"Stabil nøkkel for dokumentet: {key} i ingest_to_chroma")  # for debugging
-    filename = os.path.basename(pdf_path)
-    metadatas = [
-        {
-            "user_id": user_id,
-            "doc": key,
-            "filename": filename,
-            "page": c["page"],
-            "start": c["start"],
-            "end": c["end"],
-            "class": doc_class,
-            "mode": "adaptive" if adaptive_chunking else "static",
-            "chunk_length": len(c["content"]),
-        }
-        for c in chunks_meta
-    ]
-
-    # Upsert til Chroma hvis ikke finnes
-    client_ch = get_client(persist_dir="data/chroma")
-    coll = get_collection(client_ch, name="pdf_chunks")
-    exists = coll.get(where={"doc": key}, limit=1)
-    if force_reindex or not exists.get("ids"):
-        upsert_chunks(coll, doc_id=key, chunks=chunks, metadatas=metadatas, api_key=st.session_state.get("openai_api_key", ""),)
-        print("Indeksering fullført (Chroma).") # for debugging
-    return key, filename, chunks, chunks_meta, doc_class, doc_score
-
-
-
-
 # --- Håndtering av opplasting ---    
 if uploaded:
     
@@ -257,7 +192,7 @@ if uploaded:
             
         # Direkte ingest til Chroma slik at filen er med i 'Alle dokumenter'
         try:
-            key, filename, chunks, chunks_meta, doc_class, doc_score = ingest_to_chroma(pdf_path, adaptive_chunking)
+            key, filename, chunks, chunks_meta, doc_class, doc_score = ingest_to_chroma(pdf_path, adaptive_chunking, user_id)
             st.caption(f"📄 Klassifisering: **{doc_class}** (score {doc_score:.2f})")
         except Exception as e:
             st.warning(f"Ingest feilet: {e}")
@@ -289,8 +224,10 @@ if uploaded:
 
         st.session_state["upload_reset"] += 1
         st.rerun()
+        
+        
     
-    
+###############################################################
 ###############  Sidepanel: Velg dokument  ####################
 st.sidebar.subheader("Dokumenter")
 file_query = st.sidebar.text_input("🔎 Søk i filnavn", key="file_query", placeholder="f.eks. 'examp' eller 'fil.pdf'")
@@ -404,6 +341,8 @@ else:
 print("Valgt dokument:", choice)  # for debugging
 
 
+
+
 ###############  Spørsmål  ####################
 st.markdown("### ❓ Skriv inn spørsmålet ditt til dokumentet")
 with st.form(key="question_form"):
@@ -411,8 +350,14 @@ with st.form(key="question_form"):
     submit_btn = st.form_submit_button("💬 Send")
 
 
-###############  Valg av omfang  ####################
+
+
+###############################################################
+###############  Valg av omfang og svar ######################
 if scope == "Kun valgt dokument" and choice:
+    
+    client_ch = get_client(persist_dir="data/chroma")
+    client = get_openai_client()
     
     if STORAGE_BACKEND is StorageBackend.LOCAL:
         filename = os.path.basename(choice)
@@ -426,7 +371,7 @@ if scope == "Kun valgt dokument" and choice:
         if st.button("🔁 Reindekseruj med nåværende chunking"):
             with st.spinner("Reindekserer dokumentet med valgt chunking..."):
                 try:
-                    key2, filename2, chunks2, chunks_meta2, doc_class2, doc_score2 = ingest_to_chroma(choice, adaptive_chunking, force_reindex=True)
+                    key2, filename2, chunks2, chunks_meta2, doc_class2, doc_score2 = ingest_to_chroma(choice, adaptive_chunking, user_id, force_reindex=True)
                     st.success("Reindeksering fullført.")
                     st.session_state["last_reindexed"] = key2
                     # Oppdater lokal nøkkel og rerstarter for å laste ny cache/tilstand
@@ -437,13 +382,9 @@ if scope == "Kun valgt dokument" and choice:
         
         # Hvis user velger ChromaDB som retriever
         if retriever_mode == "ChromaDB":
-            client_ch = get_client(persist_dir="data/chroma")
             coll = get_collection(client_ch, name="pdf_chunks")
-            
             if submit_btn and spm:
-                client = get_openai_client()
                 where = {"doc": key}  # NB: alltid kun valgt dokument i denne grenen
-                
                 hits = query_topk(coll, spm, k=8, where=where, api_key=st.session_state.get("openai_api_key", ""),)
 
                 if not hits:
@@ -471,7 +412,6 @@ if scope == "Kun valgt dokument" and choice:
             # Merk: kunne optimalisert ved å cache både chunks og metadata sammen med vektorene,
             # slik at vi slipper å kjøre extract_pages og split_pages_into_chunks hver gang.
 
-            client = get_openai_client()
             pages = extract_pages(choice)
             chunks_meta = split_pages_into_chunks(pages, size=1200, overlap=180, adaptive=adaptive_chunking)
             chunks = [c["content"] for c in chunks_meta]
@@ -511,7 +451,10 @@ if scope == "Kun valgt dokument" and choice:
 
         if submit_btn and spm:
             from app.cloud_storage import sporr_chunks
-
+            sporsmal_emb = embed_sporsmal(client, spm)
+            
+            active_doc_id = st.session_state.get("active_document_id")
+            
             try:
                 treff = sporr_chunks(
                     bruker_id=user_id,
@@ -519,9 +462,6 @@ if scope == "Kun valgt dokument" and choice:
                     top_k=5,
                     dokument_id=choice,
                 )
-            except NotImplementedError:
-                st.error("Cloud-søk (sporr_chunks) er ikke implementert ennå.")
-                treff = []
             except Exception as e:
                 st.error(f"Feil ved cloud-søk: {e}")
                 treff = []
@@ -529,8 +469,20 @@ if scope == "Kun valgt dokument" and choice:
             if not treff:
                 st.warning("Ingen treff i sky-backend for dette dokumentet.")
             else:
-                client = get_openai_client()
-                top_chunks = [t["tekst"] for t in treff if "tekst" in t]
+                 # Mappee treff til samme struktur som lokal 'hits'-liste
+                hits = []
+                for t in treff:
+                    meta = {
+                        "docId": t.get("docId"),
+                        "page": t.get("page") or t.get("side"),
+                        "filnavn": t.get("filnavn"),
+                        "dokumentklasse": t.get("dokumentklasse"),
+                        "score": t.get("score"),
+                    }
+                    hits.append((t.get("id"), t.get("tekst", ""), meta))
+
+                # Bruk samme svarfunksjon som lokalt
+                top_chunks = [h[1] for h in hits]
                 answer, cites = answer_with_top_chunks(
                     client,
                     spm,
@@ -539,11 +491,12 @@ if scope == "Kun valgt dokument" and choice:
                 )
                 st.markdown("### ✅ Svar")
                 st.write(answer)
+
+                #  Vis sitater i samme stil- nydeliggg
                 with st.expander("Vis sitater (fra cloud)"):
-                    for i, t in enumerate(treff, start=1):
-                        side = t.get("page") or t.get("side")
-                        tekst = t.get("tekst", "")[:200]
-                        st.markdown(f"**Treff {i} – side {side}**  \n> {tekst} …")
+                    for i, (hid, text, meta) in enumerate(hits, start=1):
+                        side = meta.get("page")
+                        st.markdown(f"**Treff {i} – side {side}**  \n> {text[:200]} …")
                         
                     
 ###############  Globalt omfang  ####################
@@ -577,16 +530,52 @@ elif scope == "Alle dokumenter":
     else:
         # ---- SKY-MODUS: globalt søk på tvers av alle dokumenter ----
         if submit_btn and spm:
+            client = get_openai_client()
+            # 1) Lag embedding for spørsmålet
+            sporsmal_emb = embed_sporsmal(client, spm)
+
             try:
+                # 2) Søk i alle dokumenter for brukeren (dokument_id=None)
                 treff = sporr_chunks(
                     bruker_id=user_id,
-                    sporsmal=spm,
+                    sporsmal_embedding=sporsmal_emb,
                     top_k=5,
                     dokument_id=None,  # alle dokumenter for brukeren
                 )
-            except NotImplementedError:
-                st.error("Cloud-globalt søk er ikke implementert ennå.")
+            except Exception as e:
+                st.error(f"Feil ved cloud-globalt søk: {e}")
                 treff = []
+
+            if not treff:
+                st.warning("Ingen treff i sky-backend for globalt søk.")
+            else:
+                # 3) Mapp treff til 'hits'-struktur
+                hits = []
+                for t in treff:
+                    meta = {
+                        "docId": t.get("docId"),
+                        "page": t.get("page") or t.get("side"),
+                        "filnavn": t.get("filnavn"),
+                        "dokumentklasse": t.get("dokumentklasse"),
+                        "score": t.get("score"),
+                    }
+                    hits.append((t.get("id"), t.get("tekst", ""), meta))
+
+                top_chunks = [h[1] for h in hits]
+                answer, cites = answer_with_top_chunks(
+                    client,
+                    spm,
+                    top_chunks,
+                    system_prompt=current_sys_prompt,
+                )
+                st.markdown("### ✅ Svar")
+                st.write(answer)
+
+                with st.expander("Vis sitater (fra cloud, alle dokumenter)"):
+                    for i, (hid, text, meta) in enumerate(hits, start=1):
+                        side = meta.get("page")
+                        filnavn = meta.get("filnavn", "?")
+                        st.markdown(f"**Treff {i} – {filnavn} – side {side}**  \n> {text[:200]} …")
 
 # Mangler valg av dokument
 else:
