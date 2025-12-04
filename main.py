@@ -82,7 +82,7 @@ st.set_page_config(page_title="PDF-spørsmål (NO)", page_icon="📄", layout="w
 # Laster CSS for tilpasset styling
 load_css("assets/styles.css")
 # Tittel
-st.title("📄 PDF Assistent - husk å fjerne Bruk min egen nøkkel!!!!!!!!!!!!!!!!")
+st.title("📄 PDF Assistent ")
 
 
 # --- Sidepanel: OpenAI API-nøkkel ---
@@ -91,7 +91,7 @@ with st.sidebar:
 
     use_user_key = st.checkbox(
         "Bruk min egen nøkkel",
-        value=True,
+        value=False,
         help="Anbefalt for cluod eller delte miljøer.",
     )
 
@@ -486,6 +486,17 @@ if scope == "Kun valgt dokument" and choice:
                         vecs = embed_texts(client, chunks)
                         save_cached_vectors("indexes", key, vecs)
                     st.success("Indeksering fullført (cache lagret).")
+                    
+            if vecs is not None and len(vecs) != len(chunks):
+                st.warning(
+                    "Eksisterende vektor-cache passer ikke til nåværende chunking. "
+                    "Lager nye embeddings for dette dokumentet."
+                )
+                with st.spinner("Lager embeddings på nytt..."):
+                    vecs = embed_texts(client, chunks)
+                    save_cached_vectors("indexes", key, vecs)
+                st.success("Ny vektor-cache lagret.")
+                
             if submit_btn and spm:
                 answer, cites = answer_with_context(client, spm, chunks, vecs, k=3, system_prompt=current_sys_prompt)
                 st.markdown("### ✅ Svar"); st.write(answer)
