@@ -1,7 +1,5 @@
 # Ignore local data and caches so they are NOT copied into the container image
-data/raw/
-data/chroma/
-data/**/raw/
+data/
 indexes/
 assets/
 
@@ -24,3 +22,7 @@ __pycache__/
 
 # Lokalne configi
 .env
+
+infra/.terraform/
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
