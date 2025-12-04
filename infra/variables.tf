@@ -24,11 +24,6 @@ variable "location" {
   default     = "westeurope"
 }
 
-variable "resource_group_name" {
-  description = "Navn på resource group for PDF-assistenten"
-  type        = string
-  default     = "rg-pdf-assistent"
-}
 
 variable "storage_account_name" {
   description = "Unikt navn på Storage Account"

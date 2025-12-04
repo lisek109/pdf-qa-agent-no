@@ -207,76 +207,74 @@ if uploaded:
         # Start appen på nytt for å laste widgeten med den nye nøkkelen/statusen
         st.rerun()
     else:
-    # ---- SKY-MODUS: lagre PDF i cloud storage (Blob/Cosmos) ----
-    data = uploaded.getvalue()
+        # ---- SKY-MODUS: lagre PDF i cloud storage (Blob/Cosmos) ----
+        data = uploaded.getvalue()
 
-    # OpenAI-klient trengs for embeddings
-    client = get_openai_client()
-
-    try:
-        # 1) Lagre selve PDF-filen i Blob Storage + metadata i Cosmos
-        dokument_id = lagre_pdf(user_id, uploaded.name, data)
-
-        # 2) Ekstraher tekst og lag chunks lokalt (fra den opplastede bytestreamen)
-        #    Vi skriver til en midlertidig fil fordi extract_pages forventer en filsti.
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            tmp.write(data)
-            tmp_path = tmp.name
+        # OpenAI-klient trengs for embeddings
+        client = get_openai_client()
 
         try:
-            # Leser sider fra midlertidig PDF
-            pages = extract_pages(tmp_path)
-            # Lager chunks (samme logikk som i lokal-modus)
-            chunks_meta = split_pages_into_chunks(
-                pages,
-                size=1200,
-                overlap=180,
-                adaptive=adaptive_chunking,
-            )
-            chunks = [c["content"] for c in chunks_meta]
+            # 1) Lagre selve PDF-filen i Blob Storage + metadata i Cosmos
+            dokument_id = lagre_pdf(user_id, uploaded.name, data)
 
-            # 3) Beregn embeddings for alle chunks
-            vecs = embed_texts(client, chunks)
+            # 2) Ekstraher tekst og lag chunks lokalt (fra den opplastede bytestreamen)
+            #    Vi skriver til en midlertidig fil fordi extract_pages forventer en filsti.
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                tmp.write(data)
+                tmp_path = tmp.name
 
-            # 4) Bygg struktur for lagre_chunks (en dict per chunk)
-            chunks_med_embeddings = []
-            for i, (chunk, meta, emb) in enumerate(zip(chunks, chunks_meta, vecs)):
-                chunks_med_embeddings.append(
-                    {
-                        "chunk_index": i,
-                        "tekst": chunk,
-                        "page": meta.get("page"),
-                        "embedding": emb,
-                        "dokumentklasse": None,  # ev. senere: klassifisering per dokument
-                        "filnavn": uploaded.name,
-                    }
+            try:
+                # Leser sider fra midlertidig PDF
+                pages = extract_pages(tmp_path)
+                # Lager chunks (samme logikk som i lokal-modus)
+                chunks_meta = split_pages_into_chunks(
+                    pages,
+                    size=1200,
+                    overlap=180,
+                    adaptive=adaptive_chunking,
+                )
+                chunks = [c["content"] for c in chunks_meta]
+
+                # 3) Beregn embeddings for alle chunks
+                vecs = embed_texts(client, chunks)
+
+                # 4) Bygg struktur for lagre_chunks (en dict per chunk)
+                chunks_med_embeddings = []
+                for i, (chunk, meta, emb) in enumerate(zip(chunks, chunks_meta, vecs)):
+                    chunks_med_embeddings.append(
+                        {
+                            "chunk_index": i,
+                            "tekst": chunk,
+                            "page": meta.get("page"),
+                            "embedding": emb,
+                            "dokumentklasse": None,  # ev. senere: klassifisering per dokument
+                            "filnavn": uploaded.name,
+                        }
+                    )
+
+                # 5) Lagre chunks + embeddings i Cosmos DB
+                lagre_chunks(
+                    bruker_id=user_id,
+                    dokument_id=dokument_id,
+                    chunks_med_embeddings=chunks_med_embeddings,
                 )
 
-            # 5) Lagre chunks + embeddings i Cosmos DB
-            lagre_chunks(
-                bruker_id=user_id,
-                dokument_id=dokument_id,
-                chunks_med_embeddings=chunks_med_embeddings,
-            )
+                st.success(f"PDF og chunks lagret i sky for bruker {user_id}.")
+            finally:
+                # Forsøk å rydde opp den midlertidige filen
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
 
-            st.success(f"PDF og chunks lagret i sky for bruker {user_id}.")
-        finally:
-            # Forsøk å rydde opp den midlertidige filen
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
+            # I sky-modus bruker vi dokument-ID som "active_file"
+            st.session_state["active_file"] = dokument_id
 
-        # I sky-modus bruker vi dokument-ID som "active_file"
-        st.session_state["active_file"] = dokument_id
+        except Exception as e:
+            st.error(f"Uventet feil ved cloud-opplasting: {e}")
 
-    except NotImplementedError:
-        st.error("Cloud-lagring (lagre_pdf / lagre_chunks) er ikke implementert ennå.")
-    except Exception as e:
-        st.error(f"Uventet feil ved cloud-opplasting: {e}")
-
-    st.session_state["upload_reset"] += 1
-    st.rerun()
+        st.session_state["upload_reset"] += 1
+        st.rerun()
         
         
     

@@ -1,0 +1,26 @@
+# Ignore local data and caches so they are NOT copied into the container image
+data/raw/
+data/chroma/
+data/**/raw/
+indexes/
+assets/
+
+# Python environment and editor files
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Secrets and config
+.env
+*.sqlite3
+
+# Git
+.git/
+.gitignore
+
+# Local IDE
+.vscode/
+
+# Lokalne configi
+.env
