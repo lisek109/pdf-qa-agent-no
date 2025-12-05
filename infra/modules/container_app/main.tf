@@ -40,7 +40,7 @@ resource "azurerm_container_app" "app" {
       # --- Backend-modus: lokal eller sky ---
       env {
         name  = "BACKEND_MODE"
-        value = "local" # senere: "cloud" når cloud_storage er ferdig
+        value = "cloud"
       }
 
       # --- Blob Storage connection string ---
