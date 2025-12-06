@@ -1,7 +1,3 @@
-"""
-Moduł do indeksacji PDF-ów do Chroma.
-Zawiera logikę czytania, chunking, klasyfikacji i upsert do wektorowej bazy danych.
-"""
 
 import os
 import streamlit as st
@@ -21,13 +17,13 @@ def ingest_to_chroma(
     force_reindex: bool = False,
 ):
     """
-    Pełny ingest — czytaj, chunk, klasyfikuj, upsert do Chroma.
+    Full ingest — les, chunk, klasifiser, upsert do Chroma.
 
     Args:
-        pdf_path: ścieżka do PDF na dysku
-        adaptive_chunking: czy używać adaptacyjnych rozmiarów chunków
-        user_id: ID użytkownika (dla metadanych)
-        force_reindex: jeśli True, upsert do Chroma nawet jeśli doc key już istnieje
+        pdf_path: sti tikl PDF i disken
+        adaptive_chunking: skal brukes adaptive chunking?
+        user_id: ID til user (for metadata)
+        force_reindex: hcis true, tving reindeksering selv om dokument finnes
 
     Returns:
         Tuple (key, filename, chunks, chunks_meta, doc_class, doc_score)

@@ -1,3 +1,4 @@
+# main.py
 import os
 from pathlib import Path
 import re, glob
@@ -417,26 +418,13 @@ if scope == "Kun valgt dokument" and choice:
         print(f"Stabil nøkkel for dokumentet: {key} i Kun valgt dokument")  # for debugging
         
         st.write(f"**Aktivt dokument:** {filename}")
-
-        # Reindekserings-knapp: lar bruker gjenskape chunk/embeddings i valgt modus
-        if st.button("🔁 Reindekseruj med nåværende chunking"):
-            with st.spinner("Reindekserer dokumentet med valgt chunking..."):
-                try:
-                    key2, filename2, chunks2, chunks_meta2, doc_class2, doc_score2 = ingest_to_chroma(choice, adaptive_chunking, user_id, force_reindex=True)
-                    st.success("Reindeksering fullført.")
-                    st.session_state["last_reindexed"] = key2
-                    # Oppdater lokal nøkkel og rerstarter for å laste ny cache/tilstand
-                    key = key2
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Reindeksering feilet: {e}")
         
         # Hvis user velger ChromaDB som retriever
         if retriever_mode == "ChromaDB":
             coll = get_collection(client_ch, name="pdf_chunks")
             if submit_btn and spm:
                 where = {"doc": key}  # NB: alltid kun valgt dokument i denne grenen
-                hits = query_topk(coll, spm, k=8, where=where, api_key=st.session_state.get("openai_api_key", ""),)
+                hits = query_topk(coll, spm, k=3, where=where, api_key=st.session_state.get("openai_api_key", ""),)
 
                 if not hits:
                     # Fallback: kanskje dokument er indeksert med annen chunking (adaptive/static)
@@ -575,7 +563,34 @@ elif scope == "Alle dokumenter":
 
             hits = query_topk(coll, spm, k=8, where=where, api_key=st.session_state.get("openai_api_key", ""),)
             hits = prioritize_chunks_by_keywords(spm, hits, topk=3)
-            
+
+            # Forsøk å sørge for at de endelige sitatene kommer fra ÉN fil når mulig.
+            # 1) Hvis brukeren eksplisitt nevner et filnavn i spørsmålet, filtrer til den filen.
+            # 2) Ellers, hvis treffene kommer fra flere filer, velg majoritetsfilen.
+            if hits:
+                filenames = [ (h[2].get('filename') or h[2].get('filnavn') or '') for h in hits ]
+                unique_files = [f for f in set(filenames) if f]
+                target_file = None
+                qlow = spm.lower()
+                # 1) eksplisitt nevnt fil i spørsmål?
+                for f in unique_files:
+                    base = os.path.splitext(os.path.basename(f))[0].lower()
+                    if base in qlow or f.lower() in qlow:
+                        target_file = f
+                        break
+                # 2) velg majoritetsfil hvis flere filer representert
+                if target_file is None and len(unique_files) > 1:
+                    from collections import Counter
+                    cnt = Counter(filenames)
+                    most_common = cnt.most_common(1)[0][0]
+                    if most_common:
+                        target_file = most_common
+                # Filtrer hits til target_file hvis vi fant en og filtreringen ikke tømmer resultatet
+                if target_file:
+                    filtered = [h for h in hits if (h[2].get('filename') or h[2].get('filnavn') or '') == target_file]
+                    if filtered:
+                        hits = filtered
+
             if not hits:
                 # robust fallback til hele korpuset
                 hits = query_topk(coll, spm, k=3, where={"user_id": user_id}, api_key=st.session_state.get("openai_api_key", ""),)
