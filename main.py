@@ -442,9 +442,10 @@ if scope == "Kun valgt dokument" and choice:
                     top_chunks = [h[1] for h in hits]
                 answer, cites = answer_with_top_chunks(client, spm, top_chunks, system_prompt=current_sys_prompt)
                 st.markdown("### ✅ Svar"); st.write(answer)
-                with st.expander("Vis sitater (med side)"):
-                    for i, (hid, text, meta) in enumerate(hits):
-                        st.markdown(f"**Treff {i+1} – side {meta.get('page')}**  \n> {text[:200]} …")
+                if not answer.lower().strip().startswith("mangler"):
+                    with st.expander("Vis sitater (med side)"):
+                        for i, (hid, text, meta) in enumerate(hits):
+                            st.markdown(f"**Treff {i+1} – side {meta.get('page')}**  \n> {text[:200]} …")
             
         else:
             # Lokal (NumPy) 
@@ -488,10 +489,11 @@ if scope == "Kun valgt dokument" and choice:
             if submit_btn and spm:
                 answer, cites = answer_with_context(client, spm, chunks, vecs, k=3, system_prompt=current_sys_prompt)
                 st.markdown("### ✅ Svar"); st.write(answer)
-                with st.expander("Vis sitater (med side)"):
-                    for i, snip in cites:
-                        page = chunks_meta[i]["page"]
-                        st.markdown(f"**Chunk {i} – side {page}:**\n\n> {snip} …")
+                if not answer.lower().strip().startswith("mangler"):
+                    with st.expander("Vis sitater (med side)"):
+                        for i, snip in cites:
+                            page = chunks_meta[i]["page"]
+                            st.markdown(f"**Chunk {i} – side {page}:**\n\n> {snip} …")
     else:
                 # ---- SKY-MODUS: choice er dokument-ID, ikke filsti ----
         st.write("**Aktivt dokument (sky):**", choice)
@@ -540,10 +542,11 @@ if scope == "Kun valgt dokument" and choice:
                 st.write(answer)
 
                 #  Vis sitater i samme stil- nydeliggg
-                with st.expander("Vis sitater (fra cloud)"):
-                    for i, (hid, text, meta) in enumerate(hits, start=1):
-                        side = meta.get("page")
-                        st.markdown(f"**Treff {i} – side {side}**  \n> {text[:200]} …")
+                if not answer.lower().strip().startswith("mangler"):
+                    with st.expander("Vis sitater (fra cloud)"):
+                        for i, (hid, text, meta) in enumerate(hits, start=1):
+                            side = meta.get("page")
+                            st.markdown(f"**Treff {i} – side {side}**  \n> {text[:200]} …")
                         
                     
 ###############  Globalt omfang  ####################
@@ -598,9 +601,10 @@ elif scope == "Alle dokumenter":
             top_chunks = [h[1] for h in hits]
             answer, cites = answer_with_top_chunks(client, spm, top_chunks, system_prompt=current_sys_prompt)
             st.markdown("### ✅ Svar"); st.write(answer)
-            with st.expander("Vis sitater (fil/side)"):
-                for i, (hid, text, meta) in enumerate(hits):
-                    st.markdown(f"**Treff {i+1} – {meta.get('filename','?')} – side {meta.get('page')}**  \n> {text[:200]} …")
+            if not answer.lower().strip().startswith("mangler"):
+                with st.expander("Vis sitater (fil/side)"):
+                    for i, (hid, text, meta) in enumerate(hits):
+                        st.markdown(f"**Treff {i+1} – {meta.get('filename','?')} – side {meta.get('page')}**  \n> {text[:200]} …")
     else:
         # ---- SKY-MODUS: globalt søk på tvers av alle dokumenter ----
         if submit_btn and spm:
@@ -645,11 +649,12 @@ elif scope == "Alle dokumenter":
                 st.markdown("### ✅ Svar")
                 st.write(answer)
 
-                with st.expander("Vis sitater (fra cloud, alle dokumenter)"):
-                    for i, (hid, text, meta) in enumerate(hits, start=1):
-                        side = meta.get("page")
-                        filnavn = meta.get("filnavn", "?")
-                        st.markdown(f"**Treff {i} – {filnavn} – side {side}**  \n> {text[:200]} …")
+                if not answer.lower().strip().startswith("mangler"):
+                    with st.expander("Vis sitater (fra cloud, alle dokumenter)"):
+                        for i, (hid, text, meta) in enumerate(hits, start=1):
+                            side = meta.get("page")
+                            filnavn = meta.get("filnavn", "?")
+                            st.markdown(f"**Treff {i} – {filnavn} – side {side}**  \n> {text[:200]} …")
 
 # Mangler valg av dokument
 else:
