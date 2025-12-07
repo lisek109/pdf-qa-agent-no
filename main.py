@@ -51,7 +51,9 @@ def get_openai_client() -> OpenAI:
     """Returnerer OpenAI-klient med riktig API-nøkkel."""
     key = st.session_state.get("openai_api_key") or os.getenv("OPENAI_API_KEY")
     if not key:
-        raise RuntimeError("Mangler OpenAI API-nøkkel. Vennligst oppgi en gyldig nøkkel i sidepanelet.")
+        # Viser en vennlig beskjed i stedet for rød feilmelding
+        st.warning("Oppgi OpenAI API-nøkkel i sidepanelet før du stiller spørsmål.")
+        st.stop()  # Avbryter resten av skriptet uten stack trace
     return OpenAI(api_key=key)
 
 
@@ -480,7 +482,8 @@ if scope == "Kun valgt dokument" and choice:
                             st.markdown(f"**Chunk {i} – side {page}:**\n\n> {snip} …")
     else:
                 # ---- SKY-MODUS: choice er dokument-ID, ikke filsti ----
-        st.write("**Aktivt dokument (sky):**", choice)
+        aktivt_navn = st.session_state.get("last_choice_name", "ukjent dokument")
+        st.write(f"**Aktivt dokument (sky):** {aktivt_navn}")
 
         if submit_btn and spm:
             from app.cloud_storage import sporr_chunks
@@ -536,12 +539,12 @@ if scope == "Kun valgt dokument" and choice:
                     
 ###############  Globalt omfang  ####################
 elif scope == "Alle dokumenter":
+    client = get_openai_client()
     if STORAGE_BACKEND is StorageBackend.LOCAL:
         client_ch = get_client(persist_dir="data/chroma")
         coll = get_collection(client_ch, name="pdf_chunks")
         
         if submit_btn and spm:
-            client = get_openai_client()
             LABELS = ["faktura","bestilling","rapport","annet","kostnadsoverslag","kontrakt"]
 
             # LLM som router for hele korpuset
