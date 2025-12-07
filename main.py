@@ -22,9 +22,7 @@ from app.qa.qa_utils import embed_sporsmal
 class StorageBackend(Enum):
     LOCAL = "local"
     CLOUD = "cloud"
-    
-# BACKEND_MODE = os.getenv("BACKEND_MODE", "local")
-# STORAGE_BACKEND = StorageBackend(BACKEND_MODE)
+
 
 # Velg lagrings-backend (kan styres via miljøvariabel i container)
 _BACKEND_MODE = os.getenv("BACKEND_MODE", "local")
@@ -45,7 +43,7 @@ def load_css(path: str) -> None:
         st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
     except FileNotFoundError:
         #  Robust mot manglende styles.css
-        st.debug("styles.css ikke funnet - fortsetter uten egen CSS.")  # trygg logg-linje
+        pass  # Fortsetter uten egen CSS hvis fil mangler
         
         
 
@@ -208,69 +206,55 @@ if uploaded:
         # Start appen på nytt for å laste widgeten med den nye nøkkelen/statusen
         st.rerun()
     else:
-        # ---- SKY-MODUS: lagre PDF i cloud storage (Blob/Cosmos) ----
+        # ---- SKY-MODUS: lagre PDF i chunks i embeddings i Cosmos/Blob ----
         data = uploaded.getvalue()
-
-        # OpenAI-klient trengs for embeddings
-        client = get_openai_client()
-
         try:
-            # 1) Lagre selve PDF-filen i Blob Storage + metadata i Cosmos
+            # 1) Lagrer selve PDF-en i Blob + metadata i Cosmos
             dokument_id = lagre_pdf(user_id, uploaded.name, data)
 
-            # 2) Ekstraher tekst og lag chunks lokalt (fra den opplastede bytestreamen)
-            #    Vi skriver til en midlertidig fil fordi extract_pages forventer en filsti.
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                tmp.write(data)
-                tmp_path = tmp.name
+            # 2) Ekstraher sider og chunks lokalt (midlertidig), og lag embeddings
+            tmp_dir = os.path.join("data", "tmp_cloud")
+            os.makedirs(tmp_dir, exist_ok=True)
+            tmp_path = os.path.join(tmp_dir, f"{dokument_id}.pdf")
+            with open(tmp_path, "wb") as f:
+                f.write(data)
 
-            try:
-                # Leser sider fra midlertidig PDF
-                pages = extract_pages(tmp_path)
-                # Lager chunks (samme logikk som i lokal-modus)
-                chunks_meta = split_pages_into_chunks(
-                    pages,
-                    size=1200,
-                    overlap=180,
-                    adaptive=adaptive_chunking,
-                )
-                chunks = [c["content"] for c in chunks_meta]
+            pages = extract_pages(tmp_path)
+            chunks_meta = split_pages_into_chunks(
+                pages,
+                size=1200,
+                overlap=180,
+                adaptive=adaptive_chunking,
+            )
+            chunks = [c["content"] for c in chunks_meta]
 
-                # 3) Beregn embeddings for alle chunks
-                vecs = embed_texts(client, chunks)
+            client = get_openai_client()
+            embeddings = embed_texts(client, chunks)
 
-                # 4) Bygg struktur for lagre_chunks (en dict per chunk)
-                chunks_med_embeddings = []
-                for i, (chunk, meta, emb) in enumerate(zip(chunks, chunks_meta, vecs)):
-                    chunks_med_embeddings.append(
-                        {
-                            "chunk_index": i,
-                            "tekst": chunk,
-                            "page": meta.get("page"),
-                            "embedding": emb,
-                            "dokumentklasse": None,  # ev. senere: klassifisering per dokument
-                            "filnavn": uploaded.name,
-                        }
-                    )
-
-                # 5) Lagre chunks + embeddings i Cosmos DB
-                lagre_chunks(
-                    bruker_id=user_id,
-                    dokument_id=dokument_id,
-                    chunks_med_embeddings=chunks_med_embeddings,
+            # 3) Bygg struktur for lagring i Cosmos
+            chunks_for_cloud = []
+            for meta, emb, tekst in zip(chunks_meta, embeddings, chunks):
+                chunks_for_cloud.append(
+                    {
+                        "tekst": tekst,
+                        "page": meta.get("page"),
+                        "embedding": emb,
+                        "filnavn": uploaded.name,
+                        # "dokumentklasse": <kan fylles inn senere hvis ønskelig>
+                    }
                 )
 
-                st.success(f"PDF og chunks lagret i sky for bruker {user_id}.")
-            finally:
-                # Forsøk å rydde opp den midlertidige filen
-                try:
-                    os.remove(tmp_path)
-                except OSError:
-                    pass
+            from app.cloud_storage import lagre_chunks as cloud_lagre_chunks
 
-            # I sky-modus bruker vi dokument-ID som "active_file"
+            antall = cloud_lagre_chunks(user_id, dokument_id, chunks_for_cloud)
+            st.success(
+                f"PDF lagret i sky for bruker {user_id} med {antall} chunks i Cosmos."
+            )
+
             st.session_state["active_file"] = dokument_id
 
+        except NotImplementedError as e:
+            st.error(f"Cloud-lagring er ikke ferdig implementert: {e}")
         except Exception as e:
             st.error(f"Uventet feil ved cloud-opplasting: {e}")
 
@@ -507,7 +491,7 @@ if scope == "Kun valgt dokument" and choice:
             try:
                 treff = sporr_chunks(
                     bruker_id=user_id,
-                    sporsmal=spm,
+                    sporsmal_embedding=sporsmal_emb,
                     top_k=5,
                     dokument_id=choice,
                 )
@@ -544,6 +528,7 @@ if scope == "Kun valgt dokument" and choice:
                 #  Vis sitater i samme stil- nydeliggg
                 if not answer.lower().strip().startswith("mangler"):
                     with st.expander("Vis sitater (fra cloud)"):
+                    
                         for i, (hid, text, meta) in enumerate(hits, start=1):
                             side = meta.get("page")
                             st.markdown(f"**Treff {i} – side {side}**  \n> {text[:200]} …")
@@ -608,7 +593,6 @@ elif scope == "Alle dokumenter":
     else:
         # ---- SKY-MODUS: globalt søk på tvers av alle dokumenter ----
         if submit_btn and spm:
-            client = get_openai_client()
             # 1) Lag embedding for spørsmålet
             sporsmal_emb = embed_sporsmal(client, spm)
 

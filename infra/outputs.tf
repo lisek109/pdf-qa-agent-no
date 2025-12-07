@@ -3,5 +3,6 @@ output "resource_group_name" {
 }
 
 output "container_app_url" {
-  value = "https://${module.container_app.container_app_fqdn}"
+  description = "Basis-URL til Container App (uten revisjons-suffiks)."
+  value       = "https://${azurerm_container_app.app.ingress[0].fqdn}"
 }

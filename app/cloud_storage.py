@@ -31,6 +31,7 @@ from azure.storage.blob import BlobServiceClient, ContainerClient
 from azure.cosmos import CosmosClient, PartitionKey, exceptions as cosmos_exceptions
 # ContainerProxy finnes ikke i alle versjoner av azure-cosmos; bruk Any for typing
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -286,7 +287,7 @@ def lagre_chunks(
     """
     if not chunks_med_embeddings:
         logger.info("Ingen chunks å lagre for dokument_id=%s", dokument_id)
-        return
+        return 0
 
     container = _get_cosmos_container()
 
@@ -312,7 +313,7 @@ def lagre_chunks(
         bruker_id,
         dokument_id,
     )
-    
+    return len(chunks_med_embeddings)
     # -------------------- Semantisk søk (naiv vector search i Python) --------------------
 
 
