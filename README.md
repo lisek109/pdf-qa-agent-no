@@ -52,6 +52,25 @@ Kjør container
 docker run --rm -p 8501:8501 --env-file .env pdf-rag-no
 Åpne deretter: http://localhost:8501
 
+### Eksempel Dockerfile
+```dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Systempakker (valgfritt, men nyttig for enkelte PDF-avhengigheter)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8501
+CMD ["streamlit", "run", "main.py", "--server.address=0.0.0.0", "--server.port=8501"]
+
 
 
 ## Kjør lokalt
