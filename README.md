@@ -100,6 +100,7 @@ Start the application
 bash
 Copy code
 streamlit run main.py
+```bash
 
 
 
