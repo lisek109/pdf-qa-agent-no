@@ -265,34 +265,42 @@ def list_bruker_dokumenter(bruker_id: str) -> List[Dict]:
   
   
 # -------------------- Lagring av chunks + embeddings (Cosmos) --------------------
-
-
 def lagre_chunks(
     bruker_id: str,
     dokument_id: str,
     chunks_med_embeddings: List[Dict],
-) -> None:
+) -> int:
     """
-    Lagre tekst-chunks + embeddings for et dokument i Cosmos.
+    Lagrer tekst-chunks + embeddings for ett dokument i Cosmos DB.
 
     Forventet struktur for hver chunk i chunks_med_embeddings:
       {
-        "chunk_index": int,
+        "chunk_index": int,        # indeks i dokumentet (0..N-1)
         "tekst": str,
         "page": int | None,
-        "embedding": List[float],
+        "embedding": List[float],  # MÅ være vanlig Python-liste, ikke numpy-array
         "dokumentklasse": str | None,
         "filnavn": str | None
       }
+
+    Returnerer:
+      Antall chunks som ble lagret.
     """
     if not chunks_med_embeddings:
         logger.info("Ingen chunks å lagre for dokument_id=%s", dokument_id)
         return 0
 
     container = _get_cosmos_container()
+    antall = 0
 
     for ch in chunks_med_embeddings:
         chunk_id = str(uuid.uuid4())
+
+        # Sørger for at embedding er en vanlig liste (i tilfelle noe kom inn som numpy)
+        emb = ch.get("embedding", [])
+        if hasattr(emb, "tolist"):
+            emb = emb.tolist()
+
         item = {
             "id": chunk_id,
             "type": "chunk",
@@ -301,19 +309,21 @@ def lagre_chunks(
             "chunkIndex": int(ch.get("chunk_index", 0)),
             "tekst": ch.get("tekst", ""),
             "page": ch.get("page"),
-            "embedding": ch.get("embedding", []),
+            "embedding": emb,
             "filnavn": ch.get("filnavn"),
             "dokumentklasse": ch.get("dokumentklasse"),
         }
         container.upsert_item(item)
+        antall += 1
 
     logger.info(
         "Lagret %d chunks i Cosmos for bruker_id=%s, dokument_id=%s",
-        len(chunks_med_embeddings),
+        antall,
         bruker_id,
         dokument_id,
     )
-    return len(chunks_med_embeddings)
+    return antall
+
     # -------------------- Semantisk søk (naiv vector search i Python) --------------------
 
 

@@ -218,6 +218,8 @@ if uploaded:
             tmp_dir = os.path.join("data", "tmp_cloud")
             os.makedirs(tmp_dir, exist_ok=True)
             tmp_path = os.path.join(tmp_dir, f"{dokument_id}.pdf")
+            
+            # Skriver PDF til en midlertidig fil slik at extract_pages kan lese den
             with open(tmp_path, "wb") as f:
                 f.write(data)
 
@@ -230,19 +232,26 @@ if uploaded:
             )
             chunks = [c["content"] for c in chunks_meta]
 
+            # Lager OpenAI-klient og embeddings for alle chunks
             client = get_openai_client()
             embeddings = embed_texts(client, chunks)
 
             # 3) Bygg struktur for lagring i Cosmos
             chunks_for_cloud = []
             for meta, emb, tekst in zip(chunks_meta, embeddings, chunks):
+            # Sørger for at embedding er vanlig Python-liste (JSON-serialiserbar)
+                if hasattr(emb, "tolist"):
+                    emb_list = emb.tolist()
+                else:
+                    emb_list = emb
+
                 chunks_for_cloud.append(
                     {
                         "tekst": tekst,
                         "page": meta.get("page"),
-                        "embedding": emb,
+                        "embedding": emb_list,
                         "filnavn": uploaded.name,
-                        # "dokumentklasse": <kan fylles inn senere hvis ønskelig>
+                        # "dokumentklasse": <kan settes senere hvis du vil>
                     }
                 )
 
@@ -255,8 +264,6 @@ if uploaded:
 
             st.session_state["active_file"] = dokument_id
 
-        except NotImplementedError as e:
-            st.error(f"Cloud-lagring er ikke ferdig implementert: {e}")
         except Exception as e:
             st.error(f"Uventet feil ved cloud-opplasting: {e}")
 
