@@ -1,13 +1,13 @@
-
 # PDF Q&A (RAG)
 
 A lightweight solution for answering questions directly from PDF documents using
 **Retrieval-Augmented Generation (RAG)**.
 
-Pipeline:
+Pipeline:  
 PyMuPDF → cleaning → chunking → embeddings → top-k context → answer (GPT-4o-mini).
 
-**Focus:**
+## Focus
+
 - Simple and understandable architecture
 - Traceability (citations + page numbers)
 - Clear path toward cloud deployment (Azure)
@@ -28,23 +28,19 @@ PyMuPDF → cleaning → chunking → embeddings → top-k context → answer (G
 ## Tech Stack
 
 ### Backend / AI
-
 - Python 3.12
 - OpenAI API (LLM + embeddings)
 - RAG pipeline (chunking, retrieval, prompt orchestration)
 - ChromaDB (vector store)
 
 ### Document Processing
-
 - PyMuPDF (fitz)
 - Text cleaning and chunking (RecursiveCharacterTextSplitter)
 
 ### Frontend
-
 - Streamlit
 
 ### DevOps / Cloud (planned)
-
 - Docker
 - Azure (App Service / Container Apps)
 - Terraform (Infrastructure as Code)
@@ -52,7 +48,6 @@ PyMuPDF → cleaning → chunking → embeddings → top-k context → answer (G
 - Cosmos DB (planned)
 
 ### Version Control
-
 - Git
 - GitHub
 
@@ -63,7 +58,6 @@ PyMuPDF → cleaning → chunking → embeddings → top-k context → answer (G
 ### Run with Docker (recommended)
 
 #### Build the image
-
 ```bash
 docker build -t pdf-rag .
 Run the container
@@ -82,12 +76,14 @@ Add your OPENAI_API_KEY to .env.
 
 Create and activate virtual environment
 Windows (PowerShell)
+
 powershell
 Copy code
 py -3.12 -m venv .venv
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 macOS / Linux
+
 bash
 Copy code
 python3.12 -m venv .venv
@@ -100,57 +96,3 @@ Start the application
 bash
 Copy code
 streamlit run main.py
-```bash
-
-
-
-
-
-# PDF-spørsmål & svar (RAG) – norsk
-
-En lettvektsløsning som besvarer spørsmål direkte fra PDF-dokumenter ved hjelp av RAG (Retrieval-Augmented Generation):  
-**PyMuPDF → rensing → chunking → embeddings → top-k kontekst → svar (GPT-4o-mini)**.
-
-Fokus: enkel og forståelig arkitektur, sporbarhet (sitater + side), og tydelig vei mot skyløsning (Azure).
-
-## Krav
-
-- **Python 3.12.x** (anbefalt)
-- `pip`, `venv`
-
-> 💡 Merk (Windows): `PyMuPDF==1.24.9` mangler wheel for **Python 3.13**. På 3.13 forsøker `pip` å kompilere fra kilde og feiler ofte med  
-> `Exception: Unable to find Visual Studio`.  
-> Løsning: bruk **Python 3.12** (enklest), eller installer **Visual Studio C++ Build Tools**.
-
-## Teknologier og verktøy (Tech stack)
-
-### Backend / AI
-- Python 3.12
-- OpenAI API (LLM + embeddings)
-- RAG-pipeline (chunking + retrieval + promptstyring)
-- Vector store: **Chroma DB** (alternativt lokal cache i MVP-fase)
-
-### Dokumentbehandling
-- PyMuPDF (fitz) – tekstuttrekk fra PDF
-- Tekstrensing + chunking (RecursiveCharacterTextSplitter)
-
-### Frontend
-- Streamlit (UI for opplasting, spørsmål, svar og sitater)
-
-### DevOps / Cloud
-- Docker (containerisering)
-- Azure (deploy/hosting – f.eks. App Service / Container Apps)
-- Terraform (IaC – opprette ressurser)
-- Azure Blob Storage (lagring av PDF-er)
-- Cosmos DB (metadata, dokumentkatalog, bruker-/sesjonsdata) *(planlagt / roadmap)*
-
-### Versjonskontroll
-- Git + GitHub (commit-historikk, issues, CI-ready struktur)
-
-## Kom i gang
-
-### Kjør med Docker (anbefalt)
-
-#### 1) Bygg image
-```bash
-docker build -t pdf-rag-no .
