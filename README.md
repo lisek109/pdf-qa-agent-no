@@ -1,122 +1,105 @@
-PDF Q&A (RAG) – English
 
-A lightweight solution for answering questions directly from PDF documents using Retrieval-Augmented Generation (RAG):
+# PDF Q&A (RAG)
+
+A lightweight solution for answering questions directly from PDF documents using
+**Retrieval-Augmented Generation (RAG)**.
+
+Pipeline:
 PyMuPDF → cleaning → chunking → embeddings → top-k context → answer (GPT-4o-mini).
 
-Focus: simple and understandable architecture, traceability (citations + page numbers), and a clear path toward cloud deployment (Azure).
+**Focus:**
+- Simple and understandable architecture
+- Traceability (citations + page numbers)
+- Clear path toward cloud deployment (Azure)
 
-Requirements
+---
 
-Python 3.12.x (recommended)
+## Requirements
 
-pip, venv
+- Python 3.12.x (recommended)
+- pip, venv
 
-💡 Note (Windows):
-PyMuPDF==1.24.9 does not provide a wheel for Python 3.13. On 3.13, pip tries to compile from source and often fails with:
+> 💡 **Windows note**  
+> PyMuPDF==1.24.9 does not provide a wheel for Python 3.13.  
+> Use Python 3.12 or install Visual Studio C++ Build Tools.
 
-Exception: Unable to find Visual Studio
+---
 
+## Tech Stack
 
-Solution: use Python 3.12 (recommended), or install Visual Studio C++ Build Tools.
+### Backend / AI
 
-Tech Stack
-Backend / AI
+- Python 3.12
+- OpenAI API (LLM + embeddings)
+- RAG pipeline (chunking, retrieval, prompt orchestration)
+- ChromaDB (vector store)
 
-Python 3.12
+### Document Processing
 
-OpenAI API (LLM + embeddings)
+- PyMuPDF (fitz)
+- Text cleaning and chunking (RecursiveCharacterTextSplitter)
 
-RAG pipeline (chunking, retrieval, prompt orchestration)
+### Frontend
 
-Vector store: ChromaDB (local cache alternative in MVP phase)
+- Streamlit
 
-Document Processing
+### DevOps / Cloud (planned)
 
-PyMuPDF (fitz) – PDF text extraction
+- Docker
+- Azure (App Service / Container Apps)
+- Terraform (Infrastructure as Code)
+- Azure Blob Storage
+- Cosmos DB (planned)
 
-Text cleaning + chunking (RecursiveCharacterTextSplitter)
+### Version Control
 
-Frontend
+- Git
+- GitHub
 
-Streamlit – UI for file upload, questions, answers, and citations
+---
 
-DevOps / Cloud (planned / roadmap)
+## Getting Started
 
-Docker – containerization
+### Run with Docker (recommended)
 
-Azure – deployment/hosting (e.g., App Service / Container Apps)
+#### Build the image
 
-Terraform – Infrastructure as Code
-
-Azure Blob Storage – PDF storage
-
-Cosmos DB – metadata, document catalog, user/session data (planned)
-
-Version Control
-
-Git + GitHub (commit history, issues, CI-ready structure)
-
-Getting Started
-Run with Docker (recommended)
-1) Build the image
-docker build -t pdf-rag-en .
-
-2) Run the container
-docker run --rm -p 8501:8501 --env-file .env pdf-rag-en
-
-
-Then open:
-👉 http://localhost:8501
-
-Example Dockerfile
-FROM python:3.12-slim
-
-WORKDIR /app
-
-# System packages (optional, but useful for some PDF dependencies)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-EXPOSE 8501
-CMD ["streamlit", "run", "main.py", "--server.address=0.0.0.0", "--server.port=8501"]
+```bash
+docker build -t pdf-rag .
+Run the container
+bash
+Copy code
+docker run --rm -p 8501:8501 --env-file .env pdf-rag
+Open:
+http://localhost:8501
 
 Run Locally
-1) Copy environment variables
+Copy environment variables
+bash
+Copy code
 cp .env.example .env
-# Add your OPENAI_API_KEY to .env
+Add your OPENAI_API_KEY to .env.
 
-2) Create and activate a virtual environment
+Create and activate virtual environment
 Windows (PowerShell)
+powershell
+Copy code
 py -3.12 -m venv .venv
-# If you get "running scripts is disabled", see Troubleshooting below
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
-
 macOS / Linux
+bash
+Copy code
 python3.12 -m venv .venv
 source .venv/bin/activate
-
-3) Install dependencies
-python -m pip install -U pip setuptools wheel
+Install dependencies
+bash
+Copy code
 pip install -r requirements.txt
-
-4) Start the UI
+Start the application
+bash
+Copy code
 streamlit run main.py
-
-Notes
-
-The application provides answer traceability by showing citations and page numbers.
-
-Designed as an MVP with a clear upgrade path to full cloud deployment on Azure.
-
-Architecture intentionally kept simple for clarity and maintainability.
-
 
 
 
@@ -152,7 +135,7 @@ Fokus: enkel og forståelig arkitektur, sporbarhet (sitater + side), og tydelig 
 **Frontend**
 - Streamlit (UI for opplasting, spørsmål, svar og sitater)
 
-**DevOps / Cloud (planlagt / del av videre arbeid)**
+**DevOps / Cloud**
 - Docker (containerisering)
 - Azure (deploy/hosting – f.eks. App Service / Container Apps)
 - Terraform (IaC – opprette ressurser)
