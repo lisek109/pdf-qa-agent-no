@@ -105,7 +105,7 @@ streamlit run main.py
 
 
 
-# PDF-spørsmål & svar (RAG) – norsk
+#### PDF-spørsmål & svar (RAG) – norsk
 
 En lettvektsløsning som besvarer spørsmål direkte fra PDF-dokumenter ved hjelp av RAG (Retrieval-Augmented Generation):
 **PyMuPDF → rensing → chunking → embeddings → top-k kontekst → svar (GPT-4o-mini)**.
