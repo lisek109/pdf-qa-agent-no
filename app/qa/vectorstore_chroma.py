@@ -8,6 +8,7 @@ from langchain_openai import OpenAIEmbeddings
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
 
 
+
 def make_embeddings(api_key: str) -> OpenAIEmbeddings:
     """
     Opretter OpenAIEmbeddings med gitt API-nøkkel.
