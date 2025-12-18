@@ -1,63 +1,74 @@
 PDF Q&A (RAG) – English
-A lightweight solution that answers questions directly from PDF documents using RAG (Retrieval‑Augmented Generation): PyMuPDF → cleaning → chunking → embeddings → top‑k context → answer (GPT‑4o‑mini).
 
-Focus areas: simple and understandable architecture, traceability (citations + page numbers), and a clear path toward a cloud‑ready solution (Azure).
+A lightweight solution for answering questions directly from PDF documents using Retrieval-Augmented Generation (RAG):
+PyMuPDF → cleaning → chunking → embeddings → top-k context → answer (GPT-4o-mini).
+
+Focus: simple and understandable architecture, traceability (citations + page numbers), and a clear path toward cloud deployment (Azure).
 
 Requirements
+
 Python 3.12.x (recommended)
 
 pip, venv
 
-💡 Note (Windows): PyMuPDF==1.24.9 does not provide wheels for Python 3.13. On Python 3.13, pip attempts to compile from source and often fails with:
+💡 Note (Windows):
+PyMuPDF==1.24.9 does not provide a wheel for Python 3.13. On 3.13, pip tries to compile from source and often fails with:
 
-Code
 Exception: Unable to find Visual Studio
-Solution: use Python 3.12 (easiest), or install Visual Studio C++ Build Tools.
+
+
+Solution: use Python 3.12 (recommended), or install Visual Studio C++ Build Tools.
 
 Tech Stack
 Backend / AI
+
 Python 3.12
 
 OpenAI API (LLM + embeddings)
 
-RAG pipeline (chunking + retrieval + prompt orchestration)
+RAG pipeline (chunking, retrieval, prompt orchestration)
 
-Vector store: ChromaDB (or a local cache in the MVP phase)
+Vector store: ChromaDB (local cache alternative in MVP phase)
 
 Document Processing
+
 PyMuPDF (fitz) – PDF text extraction
 
 Text cleaning + chunking (RecursiveCharacterTextSplitter)
 
 Frontend
-Streamlit (UI for upload, questions, answers, and citations)
 
-DevOps / Cloud (planned / future work)
-Docker (containerization)
+Streamlit – UI for file upload, questions, answers, and citations
 
-Azure (deployment/hosting – e.g., App Service / Container Apps)
+DevOps / Cloud (planned / roadmap)
 
-Terraform (IaC – provisioning resources)
+Docker – containerization
 
-Azure Blob Storage (PDF storage)
+Azure – deployment/hosting (e.g., App Service / Container Apps)
 
-Cosmos DB (metadata, document catalog, user/session data) (planned / roadmap)
+Terraform – Infrastructure as Code
+
+Azure Blob Storage – PDF storage
+
+Cosmos DB – metadata, document catalog, user/session data (planned)
 
 Version Control
-Git + GitHub (commit history, issues, CI‑ready structure)
+
+Git + GitHub (commit history, issues, CI-ready structure)
 
 Getting Started
 Run with Docker (recommended)
 1) Build the image
-bash
-docker build -t pdf-rag-no .
+docker build -t pdf-rag-en .
+
 2) Run the container
-bash
-docker run --rm -p 8501:8501 --env-file .env pdf-rag-no
-Then open: http://localhost:8501
+docker run --rm -p 8501:8501 --env-file .env pdf-rag-en
+
+
+Then open:
+👉 http://localhost:8501
 
 Example Dockerfile
-dockerfile
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -74,30 +85,37 @@ COPY . .
 
 EXPOSE 8501
 CMD ["streamlit", "run", "main.py", "--server.address=0.0.0.0", "--server.port=8501"]
+
 Run Locally
-1. Copy environment variables
-bash
+1) Copy environment variables
 cp .env.example .env
-# add your OPENAI_API_KEY to .env
-2. Create and activate a virtual environment
-Windows PowerShell
-powershell
+# Add your OPENAI_API_KEY to .env
+
+2) Create and activate a virtual environment
+Windows (PowerShell)
 py -3.12 -m venv .venv
-# If you get "running scripts is disabled", see Troubleshooting below.
+# If you get "running scripts is disabled", see Troubleshooting below
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
+
 macOS / Linux
-bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-3. Install dependencies
-bash
+
+3) Install dependencies
 python -m pip install -U pip setuptools wheel
 pip install -r requirements.txt
-4. Start the UI
-bash
 
+4) Start the UI
+streamlit run main.py
 
+Notes
+
+The application provides answer traceability by showing citations and page numbers.
+
+Designed as an MVP with a clear upgrade path to full cloud deployment on Azure.
+
+Architecture intentionally kept simple for clarity and maintainability.
 
 
 
