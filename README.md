@@ -1,75 +1,69 @@
-# PDF Q&A (RAG)
+📄 PDF Q&A (RAG)
+A lightweight application for answering questions directly from PDF documents using Retrieval‑Augmented Generation (RAG).
 
-A lightweight solution for answering questions directly from PDF documents using
-**Retrieval-Augmented Generation (RAG)**.
+Pipeline: PyMuPDF → text cleaning → chunking → embeddings → top‑k retrieval → GPT‑4o‑mini answer generation
 
-Pipeline:  
-PyMuPDF → cleaning → chunking → embeddings → top-k context → answer (GPT-4o-mini).
+🎯 Focus
+Simple and understandable architecture
 
-## Focus
+Traceability (citations + page numbers)
 
-- Simple and understandable architecture
-- Traceability (citations + page numbers)
-- Clear path toward cloud deployment (Azure)
+Clear path toward cloud deployment (Azure)
 
----
+🧰 Requirements
+Python 3.12.x (recommended)
 
-## Requirements
+pip, venv
 
-- Python 3.12.x (recommended)
-- pip, venv
+💡 Windows note PyMuPDF==1.24.9 does not provide a wheel for Python 3.13. Use Python 3.12 or install Visual Studio C++ Build Tools.
 
-> 💡 **Windows note**  
-> PyMuPDF==1.24.9 does not provide a wheel for Python 3.13.  
-> Use Python 3.12 or install Visual Studio C++ Build Tools.
+🏗️ Tech Stack
+Backend / AI
+Python 3.12
 
----
+OpenAI API (LLM + embeddings)
 
-## Tech Stack
+RAG pipeline (chunking, retrieval, prompt orchestration)
 
-### Backend / AI
-- Python 3.12
-- OpenAI API (LLM + embeddings)
-- RAG pipeline (chunking, retrieval, prompt orchestration)
-- ChromaDB (vector store)
+ChromaDB (vector store)
 
-### Document Processing
-- PyMuPDF (fitz)
-- Text cleaning and chunking (RecursiveCharacterTextSplitter)
+Document Processing
+PyMuPDF (fitz)
 
-### Frontend
-- Streamlit
+RecursiveCharacterTextSplitter (chunking + cleaning)
 
-### DevOps / Cloud 
-- Docker
-- Azure (App Service / Container Apps)
-- Terraform (Infrastructure as Code)
-- Azure Blob Storage
-- Cosmos DB 
+Frontend
+Streamlit
 
-### Version Control
-- Git
-- GitHub
+DevOps / Cloud
+Docker
 
----
+Azure App Service / Azure Container Apps
 
-## Getting Started
+Terraform (Infrastructure as Code)
 
-### Run with Docker (recommended)
+Azure Blob Storage
 
-#### Build the image
-```bash
+Cosmos DB
+
+Version Control
+Git
+
+GitHub
+
+🚀 Getting Started
+Run with Docker (recommended)
+Build the image
+bash
 docker build -t pdf-rag .
-```
 Run the container
-```bash
+bash
 docker run --rm -p 8501:8501 --env-file .env pdf-rag
-```
-Open:
+Open the app
 http://localhost:8501
 
-
-Example Dockerfile
+🐳 Example Dockerfile
+dockerfile
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -86,35 +80,41 @@ COPY . .
 
 EXPOSE 8501
 CMD ["streamlit", "run", "main.py", "--server.address=0.0.0.0", "--server.port=8501"]
-
-Run Locally
-Copy environment variables
+🖥️ Run Locally
+1. Copy environment variables
 bash
-Copy code
 cp .env.example .env
 Add your OPENAI_API_KEY to .env.
 
-Create and activate virtual environment
+2. Create and activate virtual environment
 Windows (PowerShell)
-
 powershell
-Copy code
 py -3.12 -m venv .venv
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 macOS / Linux
-
 bash
-Copy code
 python3.12 -m venv .venv
 source .venv/bin/activate
-Install dependencies
+3. Install dependencies
 bash
-Copy code
 pip install -r requirements.txt
-Start the application
+4. Start the application
 bash
-Copy code
 streamlit run main.py
-
-
+📦 Suggested Project Structure
+Code
+pdf-rag/
+│
+├── main.py
+├── rag/
+│   ├── loader.py
+│   ├── splitter.py
+│   ├── embeddings.py
+│   ├── retriever.py
+│   └── answer.py
+│
+├── requirements.txt
+├── Dockerfile
+├── .env.example
+└── README.md
