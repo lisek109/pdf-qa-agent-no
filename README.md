@@ -1,3 +1,109 @@
+PDF Q&A (RAG) – English
+A lightweight solution that answers questions directly from PDF documents using RAG (Retrieval‑Augmented Generation): PyMuPDF → cleaning → chunking → embeddings → top‑k context → answer (GPT‑4o‑mini).
+
+Focus areas: simple and understandable architecture, traceability (citations + page numbers), and a clear path toward a cloud‑ready solution (Azure).
+
+Requirements
+Python 3.12.x (recommended)
+
+pip, venv
+
+💡 Note (Windows): PyMuPDF==1.24.9 does not provide wheels for Python 3.13. On Python 3.13, pip attempts to compile from source and often fails with:
+
+Code
+Exception: Unable to find Visual Studio
+Solution: use Python 3.12 (easiest), or install Visual Studio C++ Build Tools.
+
+Tech Stack
+Backend / AI
+Python 3.12
+
+OpenAI API (LLM + embeddings)
+
+RAG pipeline (chunking + retrieval + prompt orchestration)
+
+Vector store: ChromaDB (or a local cache in the MVP phase)
+
+Document Processing
+PyMuPDF (fitz) – PDF text extraction
+
+Text cleaning + chunking (RecursiveCharacterTextSplitter)
+
+Frontend
+Streamlit (UI for upload, questions, answers, and citations)
+
+DevOps / Cloud (planned / future work)
+Docker (containerization)
+
+Azure (deployment/hosting – e.g., App Service / Container Apps)
+
+Terraform (IaC – provisioning resources)
+
+Azure Blob Storage (PDF storage)
+
+Cosmos DB (metadata, document catalog, user/session data) (planned / roadmap)
+
+Version Control
+Git + GitHub (commit history, issues, CI‑ready structure)
+
+Getting Started
+Run with Docker (recommended)
+1) Build the image
+bash
+docker build -t pdf-rag-no .
+2) Run the container
+bash
+docker run --rm -p 8501:8501 --env-file .env pdf-rag-no
+Then open: http://localhost:8501
+
+Example Dockerfile
+dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# System packages (optional, but useful for some PDF dependencies)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8501
+CMD ["streamlit", "run", "main.py", "--server.address=0.0.0.0", "--server.port=8501"]
+Run Locally
+1. Copy environment variables
+bash
+cp .env.example .env
+# add your OPENAI_API_KEY to .env
+2. Create and activate a virtual environment
+Windows PowerShell
+powershell
+py -3.12 -m venv .venv
+# If you get "running scripts is disabled", see Troubleshooting below.
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+macOS / Linux
+bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+3. Install dependencies
+bash
+python -m pip install -U pip setuptools wheel
+pip install -r requirements.txt
+4. Start the UI
+bash
+
+
+
+
+
+
+
+
 # PDF-spørsmål & svar (RAG) – norsk
 
 En lettvektsløsning som besvarer spørsmål direkte fra PDF-dokumenter ved hjelp av RAG (Retrieval-Augmented Generation):
