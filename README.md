@@ -130,36 +130,6 @@ CMD ["streamlit", "run", "main.py", "--server.address=0.0.0.0", "--server.port=8
 
 ---
 
-## 📦 Project Structure
-
-```
-pdf-rag/
-│
-├── main.py
-├── rag/
-│   ├── loader.py
-│   ├── splitter.py
-│   ├── embeddings.py
-│   ├── retriever.py
-│   └── answer.py
-│
-├── requirements.txt
-├── Dockerfile
-├── .env.example
-└── README.md
-```
-
----
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
