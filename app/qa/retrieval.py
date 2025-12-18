@@ -123,6 +123,16 @@ def answer_with_context(client: OpenAI, question: str, chunks: List[str], chunk_
 
     return answer, citations
 
+# Funksjon for å prioritere chunks basert på nøkkelord
+def prioritize_chunks_by_keywords(query: str, hits, topk: int = 3):
+    # hits: liste av (id, text, meta)
+    toks = [t for t in re.split(r"[\W_]+", query.lower()) if len(t) > 2]
+    def score(text: str) -> int:
+        tl = text.lower()
+        return sum(1 for t in toks if t in tl)
+    ranked = sorted(hits, key=lambda h: score(h[1]), reverse=True)
+    return ranked[:topk]
+
 
 
 ##############  Lightweight variant for Chroma ##############
