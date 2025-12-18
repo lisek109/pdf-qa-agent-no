@@ -40,12 +40,12 @@ PyMuPDF → cleaning → chunking → embeddings → top-k context → answer (G
 ### Frontend
 - Streamlit
 
-### DevOps / Cloud (planned)
+### DevOps / Cloud 
 - Docker
 - Azure (App Service / Container Apps)
 - Terraform (Infrastructure as Code)
 - Azure Blob Storage
-- Cosmos DB (planned)
+- Cosmos DB 
 
 ### Version Control
 - Git
