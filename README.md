@@ -60,10 +60,11 @@ PyMuPDF → cleaning → chunking → embeddings → top-k context → answer (G
 #### Build the image
 ```bash
 docker build -t pdf-rag .
+```
 Run the container
-bash
-Copy code
+```bash
 docker run --rm -p 8501:8501 --env-file .env pdf-rag
+```
 Open:
 http://localhost:8501
 
