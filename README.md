@@ -35,6 +35,12 @@ It is a document-grounded QA system:
 
 • Citations and page numbers are shown for traceability
 
+## 🖥️ User Interface
+
+Below is the current UI:
+
+![Application Interface](docs/ui_overview.png)
+
 
 ## 🖥️ User Interface Overview
 
