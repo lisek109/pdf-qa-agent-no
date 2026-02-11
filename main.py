@@ -91,7 +91,7 @@ with st.sidebar:
     st.markdown("### 🔑 OpenAI API key")
 
     use_user_key = st.checkbox(
-        "Bruk min egen nøkkel",
+        "Bruk min egen Open AI nøkkel",
         value=False,
         help="Anbefalt for cluod eller delte miljøer.",
     )

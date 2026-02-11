@@ -1,138 +1,181 @@
-# 📄 PDF Q&A (RAG)
+## 📄 PDF Q&A Assistant (RAG)
 
-A lightweight application for answering questions directly from PDF documents using Retrieval-Augmented Generation (RAG).
+An interactive application for answering questions directly from PDF documents using Retrieval-Augmented Generation (RAG).
 
-**Pipeline:** PyMuPDF → text cleaning → chunking → embeddings → top-k retrieval → GPT-4o-mini answer generation
+The system extracts text from PDFs, splits it into semantic chunks, stores embeddings in a vector database, retrieves the most relevant fragments, and generates grounded answers using GPT-4o-mini.
 
----
+## 🧠 How It Works (In Practice)
 
-## 🎯 Focus
+The application works in two modes:
 
-- **Simple and understandable architecture**
-- **Traceability** (citations + page numbers)
-- **Clear path toward cloud deployment** (Azure)
+### 🔹 Single-document mode
 
----
+• User uploads a PDF through the GUI
 
-## 🧰 Requirements
+• The document is processed and indexed
 
-- Python 3.12.x (recommended)
-- pip, venv
+• Questions are answered strictly based on that document
 
-> **💡 Windows note:** PyMuPDF==1.24.9 does not provide a wheel for Python 3.13. Use Python 3.12 or install Visual Studio C++ Build Tools.
+### 🔹 Multi-document mode
 
----
+• PDFs can be stored in the database
 
-## 🏗️ Tech Stack
+• User can query one selected document
 
+• Or query across all stored documents
+
+### 🔹 Interaction Model
+
+This is not a free-form chatbot.
+It is a document-grounded QA system:
+
+• Each question is independently answered
+
+• Answers are based strictly on retrieved document fragments
+
+• Citations and page numbers are shown for traceability
+
+## 🖥️ User Interface
+
+Below is the current UI:
+
+![Application Interface](docs/ui_overview.png)
+
+
+## 🖥️ User Interface Overview
+
+1. 🧠 Use your own OpenAI API key  
+2. 🗂️ Select vector database  
+3. ✂️ Enable adaptive chunking  
+4. 🔍 Search files in database  
+5. 📄 Select specific document  
+6. 📚 Query across all documents  
+7. ⚙️ Modify system prompt  
+8. 📤 Upload new PDF  
+9. ❓ Ask a question  
+
+
+## 📦 Does Docker Include Documents?
+
+No.
+
+The Docker container does **not** ship with preloaded PDFs.
+
+Users upload their own documents via the GUI.
+Uploaded files are stored locally (or in cloud storage when deployed).
+
+
+## 🧰 Tech Stack
 ### Backend / AI
-- Python 3.12
-- OpenAI API (LLM + embeddings)
-- RAG pipeline (chunking, retrieval, prompt orchestration)
-- ChromaDB (vector store)
+
+• Python 3.12
+
+• OpenAI API (LLM + embeddings)
+
+• RAG architecture
+
+• ChromaDB (vector store)
+
+• NumPy cosine similarity (educational implementation)
 
 ### Document Processing
-- PyMuPDF (fitz)
-- RecursiveCharacterTextSplitter (chunking + cleaning)
+
+• PyMuPDF (fitz)
+
+• RecursiveCharacterTextSplitter
+
+• Adaptive chunking logic
 
 ### Frontend
-- Streamlit
+
+• Streamlit
 
 ### DevOps / Cloud
-- Docker
-- Azure App Service / Azure Container Apps
-- Terraform (Infrastructure as Code)
-- Azure Blob Storage
-- Cosmos DB
+
+• Docker
+
+• Azure (App Service / Container Apps)
+
+• Terraform (Infrastructure as Code)
+
+• Azure Blob Storage (document storage)
+
+• Cosmos DB (metadata / future extension)
 
 ### Version Control
-- Git
-- GitHub
 
----
+• Git
 
-## 🚀 Getting Started
+• GitHub
 
-### Run with Docker (recommended)
+## 👨‍💻 Development Approach
 
-#### 1. Build the image
+This project was developed as a learning-driven engineering exercise.
+
+I collaborated with AI (ChatGPT) as part of the development process.
+The AI assisted with:
+
+• Architectural decisions
+
+• Debugging
+
+• Refactoring ideas
+
+• Exploring alternative implementations
+
+However, the learning process also included:
+
+• Studying official documentation
+
+• Completing technical courses
+
+• Reviewing Stanford lecture materials on AI and ML
+
+• Implementing and modifying core logic manually
+
+The goal was not only to build a working system, but to understand:
+
+• How embeddings work
+
+• How cosine similarity ranking functions
+
+• How vector databases differ from local caching
+
+• How prompt engineering impacts output
+
+
+## 🚀 Running the Application
+
+### Run with Docker
+
 ```bash
 docker build -t pdf-rag .
-```
-
-#### 2. Run the container
-```bash
 docker run --rm -p 8501:8501 --env-file .env pdf-rag
 ```
 
-#### 3. Open the app
+### Open:
+
 ```
 http://localhost:8501
 ```
 
----
-
-### 🖥️ Run Locally
-
-#### 1. Copy environment variables
-```bash
-cp .env.example .env
-```
-Add your `OPENAI_API_KEY` to `.env`.
-
-#### 2. Create and activate virtual environment
-
-**Windows (PowerShell)**
-```powershell
-py -3.12 -m venv .venv
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
-```
-
-**macOS / Linux**
-```bash
-python3.12 -m venv .venv
+Run Locally
+```python
+python -m venv .venv
 source .venv/bin/activate
-```
-
-#### 3. Install dependencies
-```bash
 pip install -r requirements.txt
-```
-
-#### 4. Start the application
-```bash
 streamlit run main.py
 ```
 
----
 
-## 🐳 Example Dockerfile
+## 🎯 Design Goals
 
-```dockerfile
-FROM python:3.12-slim
+• Transparent RAG pipeline
 
-WORKDIR /app
+• Explainability (citations + page numbers)
 
-# System packages (optional, but useful for some PDF dependencies)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+• Modularity (retriever can be swapped)
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+• Cloud-ready architecture
 
-COPY . .
-
-EXPOSE 8501
-CMD ["streamlit", "run", "main.py", "--server.address=0.0.0.0", "--server.port=8501"]
-```
-
----
-
-
----
-
-## 📧 Contact
-
-For questions or feedback, please open an issue on GitHub.
+• Educational clarity
