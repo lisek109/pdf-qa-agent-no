@@ -1,175 +1,175 @@
-📄 PDF Q&A Assistant (RAG)
+## 📄 PDF Q&A Assistant (RAG)
 
 An interactive application for answering questions directly from PDF documents using Retrieval-Augmented Generation (RAG).
 
 The system extracts text from PDFs, splits it into semantic chunks, stores embeddings in a vector database, retrieves the most relevant fragments, and generates grounded answers using GPT-4o-mini.
 
-🧠 How It Works (In Practice)
+## 🧠 How It Works (In Practice)
 
 The application works in two modes:
 
-🔹 Single-document mode
+### 🔹 Single-document mode
 
-User uploads a PDF through the GUI
+• User uploads a PDF through the GUI
 
-The document is processed and indexed
+• The document is processed and indexed
 
-Questions are answered strictly based on that document
+• Questions are answered strictly based on that document
 
-🔹 Multi-document mode
+### 🔹 Multi-document mode
 
-PDFs can be stored in the database
+• PDFs can be stored in the database
 
-User can query one selected document
+• User can query one selected document
 
-Or query across all stored documents
+• Or query across all stored documents
 
-🔹 Interaction Model
+### 🔹 Interaction Model
 
 This is not a free-form chatbot.
 It is a document-grounded QA system:
 
-Each question is independently answered
+• Each question is independently answered
 
-Answers are based strictly on retrieved document fragments
+• Answers are based strictly on retrieved document fragments
 
-Citations and page numbers are shown for traceability
+• Citations and page numbers are shown for traceability
 
-🖥️ User Interface Overview
 
-Below is the current UI:
+## 🖥️ User Interface Overview
 
-Interface Sections
+1. 🧠 Use your own OpenAI API key  
+2. 🗂️ Select vector database  
+3. ✂️ Enable adaptive chunking  
+4. 🔍 Search files in database  
+5. 📄 Select specific document  
+6. 📚 Query across all documents  
+7. ⚙️ Modify system prompt  
+8. 📤 Upload new PDF  
+9. ❓ Ask a question  
 
-Use your own OpenAI API key
 
-Select vector database (local NumPy / ChromaDB)
-
-Enable adaptive chunking
-
-Search files in database
-
-Select specific document
-
-Query across all documents
-
-Modify system prompt (advanced usage)
-
-Upload new PDF via GUI
-
-Ask a question about selected document(s)
-
-📦 Does Docker Include Documents?
+## 📦 Does Docker Include Documents?
 
 No.
 
-The Docker container does not ship with preloaded PDFs.
+The Docker container does **not** ship with preloaded PDFs.
 
 Users upload their own documents via the GUI.
 Uploaded files are stored locally (or in cloud storage when deployed).
 
-🧰 Tech Stack
-Backend / AI
 
-Python 3.12
+## 🧰 Tech Stack
+### Backend / AI
 
-OpenAI API (LLM + embeddings)
+• Python 3.12
 
-RAG architecture
+• OpenAI API (LLM + embeddings)
 
-ChromaDB (vector store)
+• RAG architecture
 
-NumPy cosine similarity (educational implementation)
+• ChromaDB (vector store)
 
-Document Processing
+• NumPy cosine similarity (educational implementation)
 
-PyMuPDF (fitz)
+### Document Processing
 
-RecursiveCharacterTextSplitter
+• PyMuPDF (fitz)
 
-Adaptive chunking logic
+• RecursiveCharacterTextSplitter
 
-Frontend
+• Adaptive chunking logic
 
-Streamlit
+### Frontend
 
-DevOps / Cloud
+• Streamlit
 
-Docker
+### DevOps / Cloud
 
-Azure (App Service / Container Apps)
+• Docker
 
-Terraform (Infrastructure as Code)
+• Azure (App Service / Container Apps)
 
-Azure Blob Storage (document storage)
+• Terraform (Infrastructure as Code)
 
-Cosmos DB (metadata / future extension)
+• Azure Blob Storage (document storage)
 
-Version Control
+• Cosmos DB (metadata / future extension)
 
-Git
+### Version Control
 
-GitHub
+• Git
 
-👨‍💻 Development Approach
+• GitHub
+
+## 👨‍💻 Development Approach
 
 This project was developed as a learning-driven engineering exercise.
 
 I collaborated with AI (ChatGPT) as part of the development process.
 The AI assisted with:
 
-Architectural decisions
+• Architectural decisions
 
-Debugging
+• Debugging
 
-Refactoring ideas
+• Refactoring ideas
 
-Exploring alternative implementations
+• Exploring alternative implementations
 
 However, the learning process also included:
 
-Studying official documentation
+• Studying official documentation
 
-Completing technical courses
+• Completing technical courses
 
-Reviewing Stanford lecture materials on AI and ML
+• Reviewing Stanford lecture materials on AI and ML
 
-Implementing and modifying core logic manually
+• Implementing and modifying core logic manually
 
 The goal was not only to build a working system, but to understand:
 
-How embeddings work
+• How embeddings work
 
-How cosine similarity ranking functions
+• How cosine similarity ranking functions
 
-How vector databases differ from local caching
+• How vector databases differ from local caching
 
-How prompt engineering impacts output
+• How prompt engineering impacts output
 
-🚀 Running the Application
-Run with Docker
+
+## 🚀 Running the Application
+
+### Run with Docker
+
+```bash
 docker build -t pdf-rag .
 docker run --rm -p 8501:8501 --env-file .env pdf-rag
+```
 
+### Open:
 
-Open:
-
+```
 http://localhost:8501
+```
 
 Run Locally
+```python
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 streamlit run main.py
+```
 
-🎯 Design Goals
 
-Transparent RAG pipeline
+## 🎯 Design Goals
 
-Explainability (citations + page numbers)
+• Transparent RAG pipeline
 
-Modularity (retriever can be swapped)
+• Explainability (citations + page numbers)
 
-Cloud-ready architecture
+• Modularity (retriever can be swapped)
 
-Educational clarity
+• Cloud-ready architecture
+
+• Educational clarity
